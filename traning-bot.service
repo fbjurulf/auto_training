@@ -1,0 +1,16 @@
+[Unit]
+Description=Traningsdataarkiv - Telegram-bot for manuell loggning
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fredrik
+WorkingDirectory=/home/fredrik/traning
+EnvironmentFile=/home/fredrik/traning/.env
+ExecStart=/home/fredrik/traning/.venv/bin/python /home/fredrik/traning/telegram_logg.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

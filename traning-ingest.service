@@ -1,0 +1,15 @@
+[Unit]
+Description=Traningsdataarkiv - ingest API
+After=network-online.target
+
+[Service]
+Type=simple
+User=fredrik
+WorkingDirectory=/home/fredrik/traning
+EnvironmentFile=/home/fredrik/traning/.env
+ExecStart=/home/fredrik/traning/.venv/bin/uvicorn ingest_app:app --host 0.0.0.0 --port 8099
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
