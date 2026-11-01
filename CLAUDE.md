@@ -23,3 +23,5 @@ Skriv aldrig till .env eller traning.db utan att fråga först.
   från Health Auto Export. Token krävs (INGEST_TOKEN), fail-closed
 - Service-filerna finns både i repot och i /etc/systemd/system/.
   deploy.sh stoppar om de glidit isär — synka då manuellt.
+
+# Deployflödet verifierat från lokal ändring till Pi.
