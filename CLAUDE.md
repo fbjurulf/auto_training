@@ -1,13 +1,15 @@
 # traning — träningsdataarkiv
 
 ## Produktion — Claude Code KAN nå Pi:n
-  ssh fredrik@100.107.27.54 "cd /home/fredrik/traning && <kommando>"
+
+ssh fredrik@100.107.27.54 "cd /home/fredrik/traning && <kommando>"
 Verifiera ALLTID mot Pi:n. Windows-kopian är dev, inte drift.
 Deploy: ssh fredrik@100.107.27.54 "cd /home/fredrik/traning && ./deploy.sh"
 Repo: fbjurulf/auto_training (deploy key, ssh-alias github-traning)
 Skriv aldrig till .env eller traning.db utan att fråga först.
 
 ## Drift
+
 - venv heter .venv (inte venv)
 - pipeline.sh var 15:e min via cron (flock /tmp/traning.lock):
   rclone från Dropbox (Apps/HealthFitExporter) → parse_hae → parse_fit
@@ -18,10 +20,28 @@ Skriv aldrig till .env eller traning.db utan att fråga först.
 - Home Assistant, Mosquitto och stock_news delar samma Pi
 
 ## Tjänster
+
 - traning-bot: telegram_logg.py, manuell loggning via Telegram
 - traning-ingest: uvicorn ingest_app:app på 0.0.0.0:8099, tar emot push
   från Health Auto Export. Token krävs (INGEST_TOKEN), fail-closed
 - Service-filerna finns både i repot och i /etc/systemd/system/.
   deploy.sh stoppar om de glidit isär — synka då manuellt.
+
+## Var datan finns
+
+- traning.db (~718 MB) och fit/ finns ENDAST på Pi:n, aldrig i repot (.gitignore).
+- Kör alla dataundersökningar över ssh, kopiera inte hit databasen:
+  ssh fredrik@100.107.27.54 "cd /home/fredrik/traning && sqlite3 -readonly traning.db '<query>'"
+  ssh fredrik@100.107.27.54 "cd /home/fredrik/traning && .venv/bin/python -c '...'"
+- sqlite3 finns installerat på Pi:n, inte nödvändigtvis lokalt.
+- Att en fil saknas lokalt betyder att den är produktionsdata, inte att den inte finns.
+- Allt som skriver till traning.db körs under samma lås som pipeline.sh, annars
+  kan det krocka med cron-körningen var 15:e minut:
+    flock /tmp/traning.lock <kommando>
+  Det gäller schemaändringar, UPDATE mot raw_import.status, parserkörningar
+  och omimport.
+- 90-dagarsrensningen av raw_import får inte köras förrän B0 är besvarad —
+  GPS-rutten i payloaden kan vara enda källan till nedförsmeter för pass som
+  bara finns i HAE.
 
 # Deployflödet verifierat från lokal ändring till Pi.
