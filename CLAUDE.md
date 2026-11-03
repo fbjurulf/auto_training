@@ -43,6 +43,11 @@ Skriv aldrig till .env eller traning.db utan att fråga först.
 - 90-dagarsrensningen av raw_import får inte köras förrän B0 är besvarad —
   GPS-rutten i payloaden kan vara enda källan till nedförsmeter för pass som
   bara finns i HAE.
+- B0: utreder om nedförsmeter faktiskt finns i rådatan — elevationDown i HAE:s
+  payload och total_descent i FIT:s lap-meddelanden — eller om de måste
+  härledas ur höjdserien i record. Svaret avgör hur del B byggs, och är skälet
+  till att 90-dagarsrensningen av raw_import är spärrad: GPS-rutten kan vara
+  enda källan till höjdserien för pass som bara finns i HAE.
 
 ## Schema
 

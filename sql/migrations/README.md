@@ -37,6 +37,16 @@ Verifiera sedan att radantalen i sport, sport_alias, source och hr_zone
 stämmer mot Pi:n, och att vyerna v_workout, v_swim, v_run, v_bike och v_zon
 går att fråga i en databas byggd av filerna.
 
+## sql/archive/
+
+- `schema_fit.sql`, `views_fit.sql` och `schema_delete.sql` är handkörda
+  ändringar från före migrationsregeln. De ingår i `schema_base.sql` och
+  ligger bara kvar som historik — kör dem inte.
+- `fix_dubbletter.sql` är ingen migrering utan en reparation: den tar bort
+  HAE-pass som också finns från FIT. Den kan behövas igen (A8 gäller
+  dubbletter). Den raderar rader, så den körs under `flock /tmp/traning.lock`
+  och bara efter att du frågat.
+
 ## Känt om referensdatan
 
 - `exercise` och `strength_set` är tomma även i produktionen (2026-11-03).
