@@ -1,0 +1,57 @@
+{
+  "_källa": "Träningsappen, avläst 2026-11-03. Avvikelser rapporteras - testet anpassas inte. Tider i sekunder, distanser i meter.",
+  "swim_2026_09_30": {
+    "local_date": "2026-09-30",
+    "longest_continuous_m": 400,
+    "set": [{"distance_m": 200, "duration_s": 278}, {"rest_s": 10}, {"distance_m": 200, "duration_s": 291}],
+    "text": "Längsta utan stopp 400 m (200 m på 4:38, 10 s, 200 m på 4:51)"
+  },
+  "swim_2026_10_07": {
+    "local_date": "2026-10-07",
+    "longest_continuous_m": 375,
+    "longest_with_short_stops_m": 1000,
+    "short_stops_s": [11, 13, 22, 14, 15],
+    "text": "Längsta utan stopp 375 m, med korta stopp 1000 m (stopp 11, 13, 22, 14, 15 s)"
+  },
+  "swim_2026_10_19": {
+    "local_date": "2026-10-19",
+    "longest_with_short_stops_m": 1200,
+    "distance_m": 1400,
+    "text": "Längsta med korta stopp 1200 m, total distans 1400 m inkl. uppvärmning"
+  },
+  "swim_2026_10_21": {
+    "local_date": "2026-10-21",
+    "fit_laps": 24,
+    "text": "FIT är sanningskälla: passet behåller FIT:s 24 varv efter att HAE körts om (A3, ersätter 'endast HAE-data' som byggde på att FIT-filen saknades)"
+  },
+  "run_2026_10_22": {
+    "local_date": "2026-10-22",
+    "lap": 2,
+    "lap_distance_km": 8.01,
+    "lap_duration_s": 2617,
+    "blocks_total_m": 13330,
+    "blocks_tolerance": 0.02,
+    "text": "Varv 2 = 8,01 km på 43:37, blocken summerar till 13,33 km ±2 % eller ingen blocktabell"
+  },
+  "run_2026_10_18": {
+    "local_date": "2026-10-18",
+    "pause_s": 628,
+    "integrity_warning": false,
+    "text": "Paus 10:28, ingen integritetsvarning"
+  },
+  "run_2026_10_04": {
+    "local_date": "2026-10-04",
+    "workout_count": 1,
+    "distance_km": 32.27,
+    "duration_s": 12209,
+    "text": "Exakt ett pass, 32,27 km på 3:23:29"
+  },
+  "week_42": {
+    "start": "2026-10-12",
+    "end": "2026-10-18",
+    "zone_share_excludes": ["hike"],
+    "zone_basis_sports": ["run", "run_treadmill", "bike", "bike_indoor", "swim_pool", "swim_open"],
+    "excluded_hours": 12,
+    "text": "80/20-andelen räknas utan de 12 timmarnas vandring. Underlagsraden räknar bara löpning, cykling och simning (A4)"
+  }
+}

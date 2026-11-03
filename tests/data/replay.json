@@ -1,0 +1,194 @@
+[
+  {
+    "at": "2026-09-30T06:58:31Z",
+    "raw_import_id": 95,
+    "hae": [
+      "hae/2026-09-30_swim_pool_raw95.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-02T07:07:00Z",
+    "raw_import_id": 105,
+    "hae": [
+      "hae/2026-09-30_swim_pool_raw105.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-02T12:45:14Z",
+    "fit": "fit/2026-09-30-073207-Pool Swim-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-04T11:15:14Z",
+    "fit": "fit/2026-10-04-093217-Outdoor Running-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-04T15:12:09Z",
+    "raw_import_id": 210,
+    "hae": [
+      "hae/2026-10-04_run_raw210.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-05T19:10:02Z",
+    "raw_import_id": 355,
+    "hae": [
+      "hae/2026-10-04_run_raw355.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-07T10:15:10Z",
+    "fit": "fit/2026-10-07-112124-Pool Swim-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-07T10:40:12Z",
+    "raw_import_id": 365,
+    "hae": [
+      "hae/2026-10-07_swim_pool_raw365.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-08T17:15:14Z",
+    "raw_import_id": 377,
+    "hae": [
+      "hae/2026-10-07_swim_pool_raw377.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-14T07:30:11Z",
+    "fit": "fit/2026-10-14-074625-Outdoor Running-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-14T10:51:46Z",
+    "raw_import_id": 550,
+    "hae": [
+      "hae/2026-10-14_run_raw550.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-15T13:15:12Z",
+    "fit": "fit/2026-10-15-100426-Hiking-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-16T20:00:14Z",
+    "fit": "fit/2026-10-16-152150-Hiking-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-17T13:30:13Z",
+    "fit": "fit/2026-10-17-103034-Hiking-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-17T22:14:19Z",
+    "raw_import_id": 561,
+    "hae": [
+      "hae/2026-10-15_hike_raw561.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-17T22:14:50Z",
+    "raw_import_id": 566,
+    "hae": [
+      "hae/2026-10-16_hike_raw566.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-17T22:15:21Z",
+    "raw_import_id": 568,
+    "hae": [
+      "hae/2026-10-14_run_raw568.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-17T22:15:26Z",
+    "raw_import_id": 569,
+    "hae": [
+      "hae/2026-10-17_hike_raw569.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-17T22:15:43Z",
+    "raw_import_id": 571,
+    "hae": [
+      "hae/2026-10-16_hike_raw571.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-17T22:16:21Z",
+    "raw_import_id": 575,
+    "hae": [
+      "hae/2026-10-15_hike_raw575.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-18T14:09:24Z",
+    "raw_import_id": 580,
+    "hae": [
+      "hae/2026-10-18_run_raw580.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-18T14:09:38Z",
+    "fit": "fit/2026-10-18-144945-Outdoor Running-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-18T20:59:13Z",
+    "raw_import_id": 583,
+    "hae": [
+      "hae/2026-10-17_hike_raw583.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-19T16:45:10Z",
+    "fit": "fit/2026-10-19-174159-Pool Swim-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-19T16:51:43Z",
+    "raw_import_id": 591,
+    "hae": [
+      "hae/2026-10-19_swim_pool_raw591.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-19T20:08:26Z",
+    "raw_import_id": 592,
+    "hae": [
+      "hae/2026-10-18_run_raw592.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-20T20:28:45Z",
+    "raw_import_id": 600,
+    "hae": [
+      "hae/2026-10-19_swim_pool_raw600.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-21T06:35:08Z",
+    "raw_import_id": 602,
+    "hae": [
+      "hae/2026-10-21_swim_pool_raw602.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-21T06:35:19Z",
+    "fit": "fit/2026-10-21-073119-Pool Swim-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-22T17:00:11Z",
+    "fit": "fit/2026-10-22-172553-Outdoor Running-Apple Watch för Fredrik.fit"
+  },
+  {
+    "at": "2026-10-22T17:14:11Z",
+    "raw_import_id": 616,
+    "hae": [
+      "hae/2026-10-21_swim_pool_raw616.json.gz",
+      "hae/2026-10-22_run_raw616.json.gz"
+    ]
+  },
+  {
+    "at": "2026-10-23T18:27:08Z",
+    "raw_import_id": 624,
+    "hae": [
+      "hae/2026-10-22_run_raw624.json.gz"
+    ]
+  }
+]
