@@ -44,4 +44,11 @@ Skriv aldrig till .env eller traning.db utan att fråga först.
   GPS-rutten i payloaden kan vara enda källan till nedförsmeter för pass som
   bara finns i HAE.
 
+## Schema
+
+- Varje schemaändring läggs som numrerad migrationsfil i sql/migrations/ och
+  körs mot Pi:n i samma steg. Se sql/migrations/README.md.
+- sql/schema_base.sql och sql/seed_reference.sql skrivs aldrig för hand — de
+  genereras om från produktionen.
+
 # Deployflödet verifierat från lokal ändring till Pi.
