@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import blockdata
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 LOG_PATH = os.environ.get("TRANING_NOTIFY_LOG", str(BASE_DIR / "logs" / "notify.log"))
@@ -96,7 +98,7 @@ def tempo(seg):
 
 def fmt_run(conn, w):
     rows = conn.execute(
-        """SELECT seq, kind, distance_m, duration_s
+        """SELECT seq, kind, started_at, distance_m, duration_s, hr_avg, hr_max
            FROM workout_segment WHERE workout_id=? AND parent_id IS NULL
            ORDER BY seq""", (w["id"],)).fetchall()
 
@@ -111,12 +113,20 @@ def fmt_run(conn, w):
 
     # Blocken mellan timer-pauserna beskriver passet bättre än
     # kilometerrastret, när de finns.
-    block = [r for r in rows if r["kind"] == "interval" and r["distance_m"]]
-    if block:
+    block = [r for r in rows if r["kind"] == "interval"]
+    if block and not blockdata.palitliga(block, w["distance_m"], w["elapsed_s"]):
+        rader.append("")
+        rader.append(blockdata.OPALITLIG)
+        block = []
+    block = blockdata.sla_ihop(block)
+    if len(block) >= 2:
         rader.append("")
         rader.append("Block: " + " · ".join(
-            f"{num((r['distance_m'] or 0) / 1000, 2)} km {mmss(tempo(r))}"
+            f"{num(r['distance_m'] / 1000, 2)} km {mmss(tempo(r))}"
+            f"{'*' if r['sammanslagen'] else ''}"
             for r in block))
+        if any(r["sammanslagen"] for r in block):
+            rader.append(blockdata.FOTNOT)
         return "\n".join(r for r in rader if r)
 
     hela = [r for r in rows if r["kind"] == "split"

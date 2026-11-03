@@ -158,7 +158,28 @@ def swim_stats(session, lengths, pool_m):
     }
 
 
-def timer_blocks(events, records):
+def _forsta_rorelse(pts, efter, fore=None):
+    """Första record efter en paus där klockan rör sig igen: distansen
+    ökar eller farten är över noll."""
+    bas = None
+    for r in pts:
+        t = r["timestamp"]
+        if t <= efter:
+            if r.get("distance") is not None:
+                bas = r["distance"]
+            continue
+        if fore is not None and t >= fore:
+            return None
+        fart = r.get("enhanced_speed") or r.get("speed") or 0
+        dist = r.get("distance")
+        if fart > 0 or (dist is not None and bas is not None and dist > bas):
+            return t
+        if dist is not None and bas is None:
+            bas = dist
+    return None
+
+
+def timer_blocks(events, records, session_end=None):
     """
     Arbetsblocken i ett pass som pausats manuellt.
 
@@ -167,34 +188,49 @@ def timer_blocks(events, records):
     timer/start. Tiden mellan start och stop är ett block du faktiskt
     sprang, och det är den strukturen ett intervallpass har.
 
+    Det sista blocket stängs ofta inte av en timer/stop utan av passets
+    session/stop_all - eller inte alls. Ett block som är öppet vid slutet
+    stängs därför vid session_end. En paus utan återstart avslutas vid
+    nästa registrerade rörelse.
+
     Ger en lista av dict:ar med tid, distans och puls per block.
     """
     marker = []
     for e in events:
-        if e.get("event") != "timer" or e.get("timestamp") is None:
+        if e.get("event") not in ("timer", "session") or e.get("timestamp") is None:
             continue
         typ = str(e.get("event_type") or "")
-        if typ == "start":
+        if typ == "start" and e["event"] == "timer":
             marker.append(("start", e["timestamp"]))
         elif typ.startswith("stop"):
             marker.append(("stop", e["timestamp"]))
+
+    pts = sorted((r for r in records if r.get("timestamp")),
+                 key=lambda r: r["timestamp"])
+    slut = session_end or (pts[-1]["timestamp"] if pts else None)
 
     intervall, oppen = [], None
     for typ, t in marker:
         if typ == "start" and oppen is None:
             oppen = t
-        elif typ == "stop" and oppen is not None:
-            if (t - oppen).total_seconds() > 0:
+        elif typ == "stop":
+            if oppen is None and intervall:
+                # Två stopp i rad: återstarten saknas.
+                oppen = _forsta_rorelse(pts, intervall[-1][1], t)
+            if oppen is not None and (t - oppen).total_seconds() > 0:
                 intervall.append((oppen, t))
             oppen = None
+
+    if oppen is None and intervall:
+        oppen = _forsta_rorelse(pts, intervall[-1][1], slut)
+    if oppen is not None and slut is not None and slut > oppen:
+        intervall.append((oppen, slut))
 
     # Ett enda block betyder att passet aldrig pausades - då finns ingen
     # struktur att visa utöver kilometervarven.
     if len(intervall) < 2:
         return []
 
-    pts = sorted((r for r in records if r.get("timestamp")),
-                 key=lambda r: r["timestamp"])
     blocks = []
     for t0, t1 in intervall:
         inom = [r for r in pts if t0 <= r["timestamp"] <= t1]
@@ -392,7 +428,13 @@ def main(omtolka=()):
             continue
         sport_id = aliases[nyckel]
 
-        raw_id = conn.execute(
+        # En omtolkning återanvänder filens parsade rad i stället för att
+        # lägga en dubblett bredvid den.
+        tidigare = conn.execute(
+            """SELECT id FROM raw_import WHERE source_id=? AND payload_sha256=?
+               AND status='parsed' ORDER BY id LIMIT 1""",
+            (src_id, digest)).fetchone() if omtolka else None
+        raw_id = tidigare["id"] if tidigare else conn.execute(
             """INSERT INTO raw_import
                (source_id, received_at, payload, payload_sha256, byte_size,
                 workout_count, status)
@@ -449,7 +491,7 @@ def main(omtolka=()):
         lengths = msgs.get("length", [])
         pool_m = session.get("pool_length")
         blocks = ([] if is_swim else
-                  timer_blocks(msgs.get("event", []), msgs.get("record", [])))
+                  timer_blocks(msgs.get("event", []), msgs.get("record", []), slut))
         save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks)
 
         if is_swim and lengths:

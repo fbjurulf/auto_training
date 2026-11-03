@@ -24,6 +24,8 @@ from datetime import date, datetime, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import blockdata
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 OUT_DIR = Path(os.environ.get("TRANING_REPORT_DIR", str(BASE_DIR / "rapporter")))
@@ -556,21 +558,32 @@ def build_report(conn, start: date, end: date) -> str:
             # Kilometervarven är ett raster klockan lägger på, och skär
             # rakt igenom den.
             block = [s for s in segs if s["kind"] == "interval"]
+            if block and not blockdata.palitliga(block, w["distance_m"], w["elapsed_s"]):
+                L.append("")
+                L.append(blockdata.OPALITLIG)
+                block = []
+            visade = blockdata.sla_ihop(block)
+            if len(visade) < 2:
+                block = []
             if block:
                 L.append("")
                 L.append("**Block mellan pauser** - så passet faktiskt kördes")
                 L.append("")
                 L.append("| Block | Distans | Tid | Tempo | Puls | Max |")
                 L.append("|---|---|---|---|---|---|")
-                for i, s in enumerate(block, 1):
+                for i, s in enumerate(visade, 1):
                     dist = s["distance_m"] or 0
                     tempo = (s["duration_s"] / (dist / 1000.0)
                              if dist > 50 and s["duration_s"] else None)
                     dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
                                 else f"{n(dist, 0)} m" if dist else "-")
-                    L.append(f"| {i} | {dist_txt} | {hms(s['duration_s'])} "
+                    L.append(f"| {i}{'*' if s['sammanslagen'] else ''} | {dist_txt} "
+                             f"| {hms(s['duration_s'])} "
                              f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
                              f"| {s['hr_max'] or '-'} |")
+                if any(s["sammanslagen"] for s in visade):
+                    L.append("")
+                    L.append(blockdata.FOTNOT)
                 paus = (w["elapsed_s"] or 0) - sum(s["duration_s"] or 0 for s in block)
                 if paus > 30:
                     L.append("")

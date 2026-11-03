@@ -65,8 +65,11 @@ class RepairTests(unittest.TestCase):
                                     "skadan gick inte att återskapa")
 
                 shutil.copy(DATA_DIR / "fit" / fit_name, tmp / "fit" / fit_name)
+                raw_rows = conn.execute("SELECT count(*) FROM raw_import").fetchone()[0]
                 parse_fit.main([tmp / "fit" / fit_name])
                 self.assertEqual(_top_segment_count(wid), expected)
+                self.assertEqual(conn.execute("SELECT count(*) FROM raw_import").fetchone()[0],
+                                 raw_rows, "omtolkningen lade en dubblett i raw_import")
 
 
 if __name__ == "__main__":

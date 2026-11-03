@@ -31,7 +31,8 @@
     "lap_duration_s": 2617,
     "blocks_total_m": 13330,
     "blocks_tolerance": 0.02,
-    "text": "Varv 2 = 8,01 km på 43:37, blocken summerar till 13,33 km ±2 % eller ingen blocktabell"
+    "text": "Varv 2 = 8,01 km på 43:37, blocken summerar till 13,33 km ±2 % eller ingen blocktabell",
+    "orsak": "A1: specen gissade på en paus utan återstart. Verklig orsak: sista blocket stängdes aldrig, eftersom session/stop_all ignorerades. Specens 15 s rödljus var en minnesbild - filen har pauser på 40, 2 och 9 s."
   },
   "run_2026_10_18": {
     "local_date": "2026-10-18",
