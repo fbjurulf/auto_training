@@ -29,11 +29,6 @@ if [[ -z "${TELEGRAM_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
   exit 1
 fi
 
-if ! sqlite3 traning.db "PRAGMA table_info(import_run)" |
-    cut -d'|' -f2 | grep -qx skipped_detail; then
-  sqlite3 traning.db "ALTER TABLE import_run ADD COLUMN skipped_detail TEXT"
-fi
-
 .venv/bin/python -c "import parse_hae, parse_fit, parse_metrics, notify, weekly, telegram_logg, ingest_app, watchdog"
 
 sudo systemctl restart traning-bot

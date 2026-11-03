@@ -226,6 +226,14 @@ def swim_sets(w):
 
 # ---------- persistering ----------
 
+# Har FIT berikat passet är FIT sanningskälla: HAE fyller bara tomma fält.
+_UPPDATERA = ", ".join(
+    f"{k}=CASE WHEN workout.fit_enriched THEN COALESCE(workout.{k}, excluded.{k}) "
+    f"ELSE excluded.{k} END"
+    for k in ("raw_import_id", "sport_id", "started_at", "ended_at", "duration_s",
+              "distance_m", "hr_avg", "hr_max", "kcal_active", "kcal_total"))
+
+
 def upsert_workout(conn, source_id, raw_id, sport_id, w):
     start, end = parse_dt(w["start"]), parse_dt(w["end"])
     offset = int(start.utcoffset().total_seconds() // 60)
@@ -237,12 +245,7 @@ def upsert_workout(conn, source_id, raw_id, sport_id, w):
             tz_offset_min, local_date, duration_s, elapsed_s, distance_m,
             hr_avg, hr_max, kcal_active, kcal_total, device, indoor)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-           ON CONFLICT(source_id, external_id) DO UPDATE SET
-             raw_import_id=excluded.raw_import_id, sport_id=excluded.sport_id,
-             started_at=excluded.started_at, ended_at=excluded.ended_at,
-             duration_s=excluded.duration_s, distance_m=excluded.distance_m,
-             hr_avg=excluded.hr_avg, hr_max=excluded.hr_max,
-             kcal_active=excluded.kcal_active, kcal_total=excluded.kcal_total""",
+           ON CONFLICT(source_id, external_id) DO UPDATE SET """ + _UPPDATERA,
         (source_id, w["id"], raw_id, sport_id, to_utc_str(start), to_utc_str(end),
          offset, start.strftime("%Y-%m-%d"),
          int(round(w.get("duration") or (end - start).total_seconds())),
@@ -374,12 +377,18 @@ def main():
                 (w["id"],)).fetchone():
                 skipped += 1
                 continue
-            existed = conn.execute(
-                "SELECT 1 FROM workout WHERE source_id=? AND external_id=?",
-                (src_id, w["id"])).fetchone() is not None
+            befintligt = conn.execute(
+                "SELECT fit_enriched FROM workout WHERE source_id=? AND external_id=?",
+                (src_id, w["id"])).fetchone()
+            existed = befintligt is not None
             try:
                 wid = upsert_workout(conn, src_id, row["id"], sport_id, w)
-                if sport_code.startswith("run"):
+                # HAE skickar överlappande fönster, så samma pass kommer om och
+                # om igen. Segment och detaljer från FIT får inte raderas av
+                # HAE:s minutupplösta version (A3).
+                if existed and befintligt["fit_enriched"]:
+                    pass
+                elif sport_code.startswith("run"):
                     save_run(conn, wid, w, parse_dt(w["start"]))
                 elif sport_code.startswith("swim"):
                     save_swim(conn, wid, w)

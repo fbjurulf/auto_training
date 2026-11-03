@@ -57,10 +57,22 @@ def db():
     finally:
         conn.close()
 
+LOCK_BUSY = 75  # flock -E: låset hålls redan, oftast av cron-körningen
+
+
 def run_pipeline():
+    # Samma lås som cron. Utan det kan två parse_fit köra samtidigt och
+    # lämna raw_import-rader kvar i 'received'. Är låset upptaget ligger
+    # payloaden kvar och tas av nästa cron-körning.
     try:
-        subprocess.run(["/home/fredrik/traning/pipeline.sh"],
+        subprocess.run(["/usr/bin/flock", "-n", "-E", str(LOCK_BUSY),
+                        "/tmp/traning.lock", "/home/fredrik/traning/pipeline.sh"],
                        timeout=600, capture_output=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode == LOCK_BUSY:
+            logger.info("pipeline.sh körs redan - payloaden tas vid nästa körning")
+        else:
+            logger.error("pipeline.sh failade: %s", exc)
     except Exception as exc:
         logger.error("pipeline.sh failade: %s", exc)
 

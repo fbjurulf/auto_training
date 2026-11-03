@@ -342,7 +342,12 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=()):
                  ) if v is not None})))
 
 
-def main():
+def main(omtolka=()):
+    """
+    Utan argument: alla FIT-filer som inte redan tolkats. Med filer i
+    omtolka: just de filerna, även om de tolkats förut - för att reparera
+    pass vars FIT-data skrivits över.
+    """
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.execute("PRAGMA foreign_keys=ON;")
     conn.row_factory = sqlite3.Row
@@ -356,13 +361,13 @@ def main():
            VALUES (?, 'poll', ?)""",
         (src_id, utc_str(datetime.now(timezone.utc)))).lastrowid
 
-    filer = sorted(FIT_DIR.glob("*.fit"))
+    filer = [Path(p) for p in omtolka] or sorted(FIT_DIR.glob("*.fit"))
     nya = berikade = hoppade = 0
     okanda = set()
 
     for path in filer:
         digest = sha256(path)
-        if conn.execute(
+        if not omtolka and conn.execute(
             """SELECT 1 FROM raw_import WHERE source_id=? AND payload_sha256=?
                AND status='parsed'""", (src_id, digest)).fetchone():
             continue
@@ -417,9 +422,11 @@ def main():
         )
 
         if workout_id:
+            # fit_enriched hindrar parse_hae från att skriva över det FIT gav.
             conn.execute(
                 """UPDATE workout SET ended_at=?, duration_s=?, elapsed_s=?,
-                     distance_m=?, hr_avg=?, hr_max=?, hr_min=?, kcal_active=?
+                     distance_m=?, hr_avg=?, hr_max=?, hr_min=?, kcal_active=?,
+                     fit_enriched=1
                    WHERE id=?""", gemensamt + (workout_id,))
             berikade += 1
         else:
@@ -428,8 +435,8 @@ def main():
                 """INSERT INTO workout
                    (source_id, external_id, raw_import_id, sport_id, started_at,
                     ended_at, duration_s, elapsed_s, distance_m, hr_avg, hr_max,
-                    hr_min, kcal_active, local_date, device)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    hr_min, kcal_active, local_date, device, fit_enriched)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
                 (src_id, hk or digest[:32], raw_id, sport_id, start_s)
                 + gemensamt + (lokal.strftime("%Y-%m-%d") if lokal else None,
                                "Apple Watch (FIT)"))
@@ -527,4 +534,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
