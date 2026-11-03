@@ -512,8 +512,10 @@ def main():
 
     conn.execute(
         """UPDATE import_run SET finished_at=?, status='ok',
-           new_count=?, updated_count=?, skipped_count=? WHERE id=?""",
-        (utc_str(datetime.now(timezone.utc)), nya, berikade, hoppade, run_id))
+           new_count=?, updated_count=?, skipped_count=?, skipped_detail=?
+           WHERE id=?""",
+        (utc_str(datetime.now(timezone.utc)), nya, berikade, hoppade,
+         ", ".join(sorted(okanda)), run_id))
     conn.commit()
 
     logger.info("FIT: %s filer, %s nya pass, %s berikade, %s hoppade",
