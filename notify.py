@@ -19,6 +19,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import blockdata
+import hojd
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -107,7 +108,7 @@ def fmt_run(conn, w):
         rad(f"{num(w['distance_m'] / 1000, 2)} km på {hms(w['duration_s'])}",
             f"{mmss(w['pace_s_per_km'])}/km" if w["pace_s_per_km"] else None),
         rad(puls(w),
-            f"{num(w['elevation_gain_m'])} hm" if w["elevation_gain_m"] else None,
+            hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"]),
             f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
     ]
 
@@ -187,7 +188,7 @@ def fmt_bike(conn, w):
             f"{num(w['speed_avg_kmh'], 1)} km/h" if w["speed_avg_kmh"] else None),
         rad(puls(w),
             f"{num(w['power_avg_w'])} W" if w["power_avg_w"] else None,
-            f"{num(w['elevation_gain_m'])} hm" if w["elevation_gain_m"] else None,
+            hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"]),
             f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
     ]
     return "\n".join(r for r in rader if r)
@@ -198,7 +199,8 @@ def fmt_generic(conn, w):
         f"{IKON.get(w['sport_code'], '🏅')} <b>{html.escape(w['sport_name'])}</b> · {datum(w['local_date'])}",
         rad(hms(w["duration_s"]),
             f"{num(w['distance_m'] / 1000, 2)} km" if w["distance_m"] else None),
-        rad(puls(w), f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
+        rad(puls(w), hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"]),
+            f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
     ]
     if w["rpe"]:
         rader.append(f"RPE {w['rpe']}")

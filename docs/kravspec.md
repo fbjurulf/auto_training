@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 63 tester.
+  parsrarna. Sviten har 74 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -165,8 +165,10 @@ för båda källorna, enligt del D.
   inom varvets tidsfönster.
 - Veckorapportens volymtabell: en kolumn upp och en ner per sport, plus
   summa.
-- Ta bort läsningen av `lap.total_ascent` och `elevationDown`. Båda är död
-  kod som ser ut att fungera.
+- Ta bort läsningen av `lap.total_ascent` (gjort). **Rättelse:** någon
+  läsning av `elevationDown` fanns aldrig i koden — påståendet kom från en
+  rapport som upprepade det utan att kontrollera. `elevation_loss_m` har
+  helt enkelt aldrig skrivits.
 
 Jämför passets härledda stigning mot `session.total_ascent`, som finns och
 är Apples eget värde. Avviker de mycket är tröskeln fel satt.
@@ -185,8 +187,37 @@ Jämför passets härledda stigning mot `session.total_ascent`, som finns och
   Kvar finns flacka löppass där härlett blir 1,4–3,5 gånger Apples värde
   (2026-03-21: 102 mot 31 m). Där dominerar bruset, och ingen tröskel som
   inte samtidigt kapar riktiga backar tar bort det.
-- v42:s tre vandringar ger 2 280 m nedför med 0 m tröskel — specens
-  "cirka 2 500 m" var en uppskattning.
+- v42:s tre vandringar ger 2 223 m nedför med den valda inställningen —
+  specens "cirka 2 500 m" var en uppskattning.
+
+**Hysteresförsök och val av inställning:** riktningsföljande hysteres (räkna
+först när vändningen överstiger tröskeln) provades med och utan 11 s
+utjämning, 1–5 m. Tre kontroller: fel mot Apple, |upp − ner| på rundor (42
+pass), spridning mellan upprepningar av samma runda (2 grupper, 9 pass —
+tunt underlag).
+
+- Upp − ner på rundor blev 4,3–4,5 m med utjämning oavsett metod. Det är
+  väntat: med hysteres som räknar sista segmentet är upp − ner per
+  konstruktion höjdskillnaden start–mål. Måttet mäter alltså drift i
+  höjdserien, inte summeringen — och driften är liten.
+- Hysteres 3 m räknar systematiskt lågt: löppass 0,80 av Apple i median
+  (7,4 mot 9,7 m/km), spridning mellan upprepningar 29 % mot 17 %.
+- **Apple är inte stabilt på samma runda:** en 7,1 km-runda gav 10, 93 och
+  26 m; en 9,3 km-runda 56–58 m tre gånger, sedan 78–85 m. Apple är därför
+  ingen facit på flacka pass, vilket stöder variant (a).
+- **Valt: 11 s glidande medel, hysteres 0 m** (`hojd.py`). Bäst på alla tre
+  mått. Konstanterna `UTJAMNING_S` och `HYSTERES_M` på ett ställe.
+
+**Byggt 2026-11-04:** `hojd.py` delas av parse_fit (record), parse_hae
+(route), weekly och notify. Migration 0004 lägger till `workout.ascent_m`,
+`descent_m`, `ascent_apple_m` och `workout_segment.elevation_loss_m`, och
+bygger om `workout_segment` så att `kind` tillåter `km` — CHECK går inte att
+ändra utan ombyggnad. Km-segment räknas vid tolkning för löpning, vandring,
+cykel och promenad, med rörelsetid (glapp över 10 s är paus). Simning får
+ingen höjd. **Utgående:** `workout_run.elevation_gain_m` och
+`elevation_loss_m` skrivs inte längre; droppas efter en vecka med rena
+körningar. HAE-pass får höjd per pass och per split men inga egna
+km-segment — HAE:s splittar är redan per kilometer.
 
 Nedförsmeter är det viktiga för benen: tre dagars vandring med cirka
 2 500 m nedför gav tydliga spår i återhämtningsdatan.

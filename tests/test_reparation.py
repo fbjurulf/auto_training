@@ -43,9 +43,10 @@ def _hae_segments(workout_id):
 
 
 def _top_segment_count(workout_id):
+    # Varv och block - kilometrarna (del B) är en egen nivå.
     return conn.execute(
-        "SELECT count(*) FROM workout_segment WHERE workout_id=? AND parent_id IS NULL",
-        (workout_id,)).fetchone()[0]
+        """SELECT count(*) FROM workout_segment WHERE workout_id=? AND parent_id IS NULL
+           AND kind != 'km'""", (workout_id,)).fetchone()[0]
 
 
 class RepairTests(unittest.TestCase):

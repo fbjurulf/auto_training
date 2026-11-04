@@ -21,12 +21,13 @@ import sqlite3
 import sys
 import uuid
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import fitdecode
 
+import hojd
 from matchning import find_workout, record_match
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,6 +38,7 @@ LOG_PATH = os.environ.get("TRANING_FIT_LOG", str(BASE_DIR / "logs" / "fit.log"))
 SOURCE_CODE = "healthfit_fit"
 HAE_SOURCE = "apple_health_hae"
 RECORD_LUCKA_MAX_S = 10    # längre glapp mellan pulsvärden räknas inte som zontid
+KM_SPORTER = ("running", "hiking", "cycling", "walking")  # får km-segment
 VILA_MIN_S = 12            # kortare avbrott i simningen är en vändning, inte vila
 
 Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -271,7 +273,8 @@ def zone_seconds(conn, records):
 
 # ---------- persistering ----------
 
-def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=()):
+def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=(),
+                  serie=None, kilometrar=()):
     """
     Varv blir segment, simlängder hängs under sitt varv via parent_id.
 
@@ -280,22 +283,31 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=()):
     ett oväntat antal längder.
 
     Arbetsblock ur timer-events skrivs som egen nivå (kind='block') före
-    varven. De två nivåerna beskriver samma pass på olika sätt och får
-    aldrig summeras ihop.
+    varven, kilometrar (kind='km') efter. Nivåerna beskriver samma pass på
+    olika sätt och får aldrig summeras ihop.
+
+    Höjdmeter per segment räknas ur höjdserien inom segmentets tidsfönster
+    (del B). FIT:s lap-meddelanden har aldrig total_ascent.
     """
+    def hojd_inom(start, sekunder):
+        if not serie or start is None or not sekunder:
+            return None, None
+        return serie.inom(start, start + timedelta(seconds=sekunder))
+
     conn.execute("DELETE FROM workout_segment WHERE workout_id=?", (workout_id,))
     seq = 0
 
     for b in blocks:
         seq += 1
         dist = b["distance_m"]
+        upp, ner = hojd_inom(b["start"], b["duration_s"])
         conn.execute(
             """INSERT INTO workout_segment
                (workout_id, seq, kind, started_at, duration_s, distance_m,
-                hr_avg, hr_max)
-               VALUES (?,?,'interval',?,?,?,?,?)""",
+                hr_avg, hr_max, elevation_gain_m, elevation_loss_m)
+               VALUES (?,?,'interval',?,?,?,?,?,?,?)""",
             (workout_id, seq, utc_str(b["start"]), b["duration_s"],
-             dist if dist and dist > 0 else None, b["hr_avg"], b["hr_max"]))
+             dist if dist and dist > 0 else None, b["hr_avg"], b["hr_max"], upp, ner))
 
     for lap in laps:
         seq += 1
@@ -305,18 +317,21 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=()):
             kind = "rest"
         else:
             kind = "interval" if is_swim else "split"
+        upp, ner = (None, None) if is_swim else hojd_inom(
+            lap.get("start_time"), lap.get("total_elapsed_time"))
 
         conn.execute(
             """INSERT INTO workout_segment
                (workout_id, seq, kind, started_at, duration_s, distance_m,
-                hr_avg, hr_max, speed_kmh, cadence, power_w, elevation_gain_m, extra)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                hr_avg, hr_max, speed_kmh, cadence, power_w, elevation_gain_m,
+                elevation_loss_m, extra)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (workout_id, seq, kind,
              utc_str(lap.get("start_time")), lap.get("total_elapsed_time"),
              dist or None, lap.get("avg_heart_rate"), lap.get("max_heart_rate"),
              round((lap.get("avg_speed") or 0) * 3.6, 2) or None,
              lap.get("avg_running_cadence") or lap.get("avg_cadence"),
-             lap.get("avg_power"), lap.get("total_ascent"),
+             lap.get("avg_power"), upp, ner,
              json.dumps({k: v for k, v in (
                  ("swim_stroke", lap.get("swim_stroke")),
                  # Avgör om varven är dina egna varvtryck eller klockans
@@ -358,6 +373,16 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=()):
                      ("strokes", strokes),
                      ("swolf", round(tid + strokes, 1) if aktiv and tid and strokes else None),
                  ) if v is not None})))
+
+    for k in kilometrar:
+        seq += 1
+        conn.execute(
+            """INSERT INTO workout_segment
+               (workout_id, seq, kind, started_at, duration_s, distance_m,
+                hr_avg, hr_max, elevation_gain_m, elevation_loss_m)
+               VALUES (?,?,'km',?,?,?,?,?,?,?)""",
+            (workout_id, seq, utc_str(k["start"]), k["duration_s"], k["distance_m"],
+             k["hr_avg"], k["hr_max"], k["upp"], k["ner"]))
 
 
 def main(omtolka=()):
@@ -477,7 +502,21 @@ def main(omtolka=()):
         pool_m = session.get("pool_length")
         blocks = ([] if is_swim else
                   timer_blocks(msgs.get("event", []), msgs.get("record", []), slut))
-        save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks)
+
+        # Del B: höjdmeter ur records, per pass, segment och kilometer.
+        records = msgs.get("record", [])
+        # Simning har ingen meningsfull höjd, även om barometern loggar.
+        serie = hojd.Hojdserie([] if is_swim else (
+            (r.get("timestamp"), r["enhanced_altitude"] if r.get("enhanced_altitude")
+             is not None else r.get("altitude")) for r in records))
+        kilometrar = (hojd.km_segment(
+            ((r.get("timestamp"), r.get("distance"), r.get("heart_rate")) for r in records),
+            serie) if session.get("sport") in KM_SPORTER else [])
+        upp, ner = serie.totalt()
+        conn.execute("UPDATE workout SET ascent_m=?, descent_m=?, ascent_apple_m=? WHERE id=?",
+                     (upp, ner, session.get("total_ascent"), workout_id))
+        save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks,
+                      serie, kilometrar)
 
         if is_swim and lengths:
             s = swim_stats(session, lengths, pool_m)
@@ -509,20 +548,19 @@ def main(omtolka=()):
             tid = session.get("total_timer_time") or 0
             conn.execute(
                 """INSERT INTO workout_run
-                   (workout_id, pace_s_per_km, elevation_gain_m, cadence_avg_spm,
+                   (workout_id, pace_s_per_km, cadence_avg_spm,
                     ground_contact_ms, vertical_oscillation_cm, stride_length_m,
                     power_avg_w)
-                   VALUES (?,?,?,?,?,?,?,?)
+                   VALUES (?,?,?,?,?,?,?)
                    ON CONFLICT(workout_id) DO UPDATE SET
                      pace_s_per_km=excluded.pace_s_per_km,
-                     elevation_gain_m=excluded.elevation_gain_m,
                      cadence_avg_spm=excluded.cadence_avg_spm,
                      ground_contact_ms=excluded.ground_contact_ms,
                      vertical_oscillation_cm=excluded.vertical_oscillation_cm,
                      stride_length_m=excluded.stride_length_m,
                      power_avg_w=excluded.power_avg_w""",
+                # Höjdmetrarna ligger i workout.ascent_m sedan del B.
                 (workout_id, round(tid / (dist / 1000.0), 1) if dist > 100 else None,
-                 session.get("total_ascent"),
                  # FIT räknar kadens per ben - dubbla för steg per minut.
                  (session.get("avg_running_cadence") or 0) * 2 or None,
                  session.get("avg_stance_time"),

@@ -26,6 +26,7 @@ from pathlib import Path
 
 import blockdata
 import fitstatus
+import hojd
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -97,6 +98,10 @@ def median(values):
 
 # ---------- datahämtning ----------
 
+def _hm(m):
+    return f"{n(m, 0)} m" if m is not None else "-"
+
+
 def week_bounds(anchor: date):
     monday = anchor - timedelta(days=anchor.weekday())
     return monday, monday + timedelta(days=6)
@@ -106,7 +111,8 @@ def totals(conn, start: date, end: date):
     rows = conn.execute(
         """SELECT sport_code, sport_name, COUNT(*) pass,
                   SUM(duration_s) sek, SUM(distance_m) m,
-                  AVG(hr_avg) puls, SUM(kcal_active) kcal
+                  AVG(hr_avg) puls, SUM(kcal_active) kcal,
+                  SUM(ascent_m) upp, SUM(descent_m) ner
            FROM v_workout WHERE local_date BETWEEN ? AND ?
            GROUP BY sport_code ORDER BY sek DESC""",
         (start.isoformat(), end.isoformat())).fetchall()
@@ -458,11 +464,11 @@ def build_report(conn, start: date, end: date, now=None) -> str:
     L.append("## Volym per sport")
     L.append("")
     if visa_4v:
-        L.append("| Sport | Pass | Tid | Mot fg v | Mot 4v-snitt | Distans | Snittpuls |")
-        L.append("|---|---|---|---|---|---|---|")
+        L.append("| Sport | Pass | Tid | Mot fg v | Mot 4v-snitt | Distans | Upp | Ner | Snittpuls |")
+        L.append("|---|---|---|---|---|---|---|---|---|")
     else:
-        L.append("| Sport | Pass | Tid | Mot fg v | Distans | Snittpuls |")
-        L.append("|---|---|---|---|---|---|")
+        L.append("| Sport | Pass | Tid | Mot fg v | Distans | Upp | Ner | Snittpuls |")
+        L.append("|---|---|---|---|---|---|---|---|")
 
     for code, t in nu.items():
         p = fg.get(code, {})
@@ -471,19 +477,24 @@ def build_report(conn, start: date, end: date, now=None) -> str:
         if visa_4v:
             s4 = snitt4.get(code, {})
             rad.append(delta(t["sek"] / 3600, (s4.get("sek") or 0) / 3600, " h"))
-        rad += [f"{n((t['m'] or 0) / 1000, 2)} km", n(t["puls"], 0)]
+        rad += [f"{n((t['m'] or 0) / 1000, 2)} km", _hm(t["upp"]), _hm(t["ner"]),
+                n(t["puls"], 0)]
         L.append("| " + " | ".join(rad) + " |")
 
     tot_s = sum(t["sek"] or 0 for t in nu.values())
     tot_p = sum(t["pass"] for t in nu.values())
     tot_m = sum(t["m"] or 0 for t in nu.values())
+    tot_upp = sum(t["upp"] or 0 for t in nu.values())
+    tot_ner = sum(t["ner"] or 0 for t in nu.values())
+    har_hojd = any(t["upp"] is not None for t in nu.values())
     fg_s = sum(t["sek"] or 0 for t in fg.values())
 
     rad = ["**Totalt**", f"**{tot_p}**", f"**{hms(tot_s)}**",
            delta(tot_s / 3600, fg_s / 3600, " h")]
     if visa_4v:
         rad.append("")
-    rad += [f"{n(tot_m / 1000, 2)} km", ""]
+    rad += [f"{n(tot_m / 1000, 2)} km", _hm(tot_upp if har_hojd else None),
+            _hm(tot_ner if har_hojd else None), ""]
     L.append("| " + " | ".join(rad) + " |")
     L.append("")
 
@@ -523,6 +534,9 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             rad.append(f"puls {w['hr_avg']}/{w['hr_max']}")
         if w["kcal_active"]:
             rad.append(f"{n(w['kcal_active'], 0)} kcal")
+        hojdtext = hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"])
+        if hojdtext:
+            rad.append(hojdtext)
         L.append(", ".join(rad))
         # Samma status som vakthundens larm - när larmet tystnar ska passet
         # fortfarande synas som HAE-pass här.
@@ -549,8 +563,6 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             extra = []
             if det["pace_s_per_km"]:
                 extra.append(f"snitttempo {mmss(det['pace_s_per_km'])}/km")
-            if det["elevation_gain_m"]:
-                extra.append(f"höjdmeter {n(det['elevation_gain_m'], 0)}")
             if det["cadence_avg_spm"]:
                 extra.append(f"kadens {n(det['cadence_avg_spm'], 0)} spm")
             if det["stride_length_m"]:

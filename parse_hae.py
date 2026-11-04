@@ -10,10 +10,11 @@ import logging
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import hojd
 from matchning import find_workout, record_match
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -268,30 +269,54 @@ def save_segments(conn, workout_id, segs):
         conn.execute(
             """INSERT INTO workout_segment
                (workout_id, seq, kind, started_at, duration_s, distance_m,
-                hr_avg, hr_max, pace_s_per_km, speed_kmh, extra)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                hr_avg, hr_max, pace_s_per_km, speed_kmh, elevation_gain_m,
+                elevation_loss_m, extra)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (workout_id, s["seq"], s["kind"], s.get("started_at"),
              s.get("duration_s"), s.get("distance_m"), s.get("hr_avg"),
              s.get("hr_max"), s.get("pace_s_per_km"), s.get("speed_kmh"),
-             s.get("extra")),
+             s.get("upp"), s.get("ner"), s.get("extra")),
         )
 
 
-def save_run(conn, workout_id, w, start_dt):
+def route_serie(w):
+    """Höjdserien ur GPS-rutten - samma 1 Hz-serie som FIT:s records."""
+    punkter = []
+    for p in w.get("route") or []:
+        try:
+            punkter.append((parse_dt(p["timestamp"]), float(p["altitude"])))
+        except (KeyError, ValueError, TypeError):
+            continue
+    return hojd.Hojdserie(punkter)
+
+
+def save_hojd(conn, workout_id, w, serie):
+    """Del B: höjdmeter upp och ner för passet, Apples värde som kontroll."""
+    upp, ner = serie.totalt()
+    conn.execute("UPDATE workout SET ascent_m=?, descent_m=?, ascent_apple_m=? WHERE id=?",
+                 (upp, ner, qty(w.get("elevationUp")), workout_id))
+
+
+def save_run(conn, workout_id, w, start_dt, serie=None):
     dist = distance_m(w.get("distance")) or 0
     dur = w.get("duration") or 0
     pace = (dur / (dist / 1000.0)) if dist > 100 else None
+    # Höjdmetrarna ligger i workout.ascent_m sedan del B.
     conn.execute(
         """INSERT INTO workout_run
-           (workout_id, pace_s_per_km, elevation_gain_m, cadence_avg_spm)
-           VALUES (?,?,?,?)
+           (workout_id, pace_s_per_km, cadence_avg_spm)
+           VALUES (?,?,?)
            ON CONFLICT(workout_id) DO UPDATE SET
              pace_s_per_km=excluded.pace_s_per_km,
-             elevation_gain_m=excluded.elevation_gain_m,
              cadence_avg_spm=excluded.cadence_avg_spm""",
-        (workout_id, pace, qty(w.get("elevationUp")), qty(w.get("stepCadence"))),
+        (workout_id, pace, qty(w.get("stepCadence"))),
     )
-    save_segments(conn, workout_id, run_splits(w, start_dt))
+    splits = run_splits(w, start_dt)
+    if serie:
+        for sp in splits:
+            t0 = datetime.strptime(sp["started_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            sp["upp"], sp["ner"] = serie.inom(t0, t0 + timedelta(seconds=sp["duration_s"]))
+    save_segments(conn, workout_id, splits)
 
 
 def save_swim(conn, workout_id, w):
@@ -399,10 +424,13 @@ def main():
                 # HAE:s minutupplösta version (A3).
                 if existed and befintligt["fit_enriched"]:
                     pass
-                elif sport_code.startswith("run"):
-                    save_run(conn, wid, w, parse_dt(w["start"]))
-                elif sport_code.startswith("swim"):
-                    save_swim(conn, wid, w)
+                else:
+                    serie = route_serie(w)
+                    save_hojd(conn, wid, w, serie)
+                    if sport_code.startswith("run"):
+                        save_run(conn, wid, w, parse_dt(w["start"]), serie)
+                    elif sport_code.startswith("swim"):
+                        save_swim(conn, wid, w)
                 updated += 1 if existed else 0
                 new += 0 if existed else 1
             except Exception as exc:
