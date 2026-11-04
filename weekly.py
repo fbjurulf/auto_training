@@ -27,6 +27,7 @@ from pathlib import Path
 import blockdata
 import fitstatus
 import hojd
+import passdata
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -550,9 +551,9 @@ def build_report(conn, start: date, end: date, now=None) -> str:
         if zoner:
             i_ordning = sorted(zoner.items(), key=lambda kv: kv[0])
             zontext = " · ".join(f"{z} {hms(s)}" for z, s in i_ordning if s >= 1)
-            tackt = sum(zoner.values())
-            if w["duration_s"] and tackt < w["duration_s"] * 0.95:
-                zontext += (f" (täcker {n(100.0 * tackt / w['duration_s'], 0)} % "
+            andel = passdata.pulstackning(zoner.values(), w["duration_s"])
+            if passdata.visa_tackning(andel):
+                zontext += (f" (täcker {n(100.0 * andel, 0)} % "
                             f"av passet, resten saknar pulsvärde)")
             L.append("Zoner: " + zontext)
 
@@ -593,8 +594,7 @@ def build_report(conn, start: date, end: date, now=None) -> str:
                 L.append("|---|---|---|---|---|---|")
                 for i, s in enumerate(visade, 1):
                     dist = s["distance_m"] or 0
-                    tempo = (s["duration_s"] / (dist / 1000.0)
-                             if dist > 50 and s["duration_s"] else None)
+                    tempo = passdata.tempo_per_km(s["duration_s"], dist)
                     dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
                                 else f"{n(dist, 0)} m" if dist else "-")
                     L.append(f"| {i}{'*' if s['sammanslagen'] else ''} | {dist_txt} "
@@ -632,10 +632,9 @@ def build_report(conn, start: date, end: date, now=None) -> str:
                 L.append("|---|---|---|---|---|---|")
                 for i, s in enumerate(varv, 1):
                     dist = s["distance_m"] or 0
-                    # Tempot räknas här i stället för att läsas ur ett fält
-                    # som bara den gamla HAE-parsern fyller.
-                    tempo = (s["duration_s"] / (dist / 1000.0)
-                             if dist > 50 and s["duration_s"] else None)
+                    # Tempot räknas ur segmentets tid och distans i stället
+                    # för att läsas ur ett fält som bara HAE-parsern fyller.
+                    tempo = passdata.tempo_per_km(s["duration_s"], dist)
                     dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
                                 else f"{n(dist, 0)} m")
                     L.append(f"| {i} | {dist_txt} | {hms(s['duration_s'])} "
@@ -744,8 +743,7 @@ def build_report(conn, start: date, end: date, now=None) -> str:
                         continue
                     # Tempot räknas här, inte ur segmentets extra-fält:
                     # det fylls bara av den gamla HAE-parsern.
-                    tempo = (s["duration_s"] / (dist / 100.0)
-                             if s["duration_s"] else None)
+                    tempo = passdata.tempo_per_100m(s["duration_s"], dist)
                     L.append(f"| {i} | {n(dist, 0)} m | {hms(s['duration_s'])} "
                              f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
                              f"| {ex.get('swim_stroke') or '-'} |")

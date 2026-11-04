@@ -17,6 +17,13 @@ def find_workout(conn, hk_uuid, start_utc, sport_id):
     """Ger (workout_id, 'uuid' | 'tid') eller (None, None)."""
     if hk_uuid:
         # Söker i alla källor: passet kan redan ha skapats av den andra.
+        #
+        # FILTRERA INTE BORT DOLDA PASS HÄR (deleted_at / duplicate_of_id).
+        # Ett dolt pass ligger kvar just för att dess external_id ska blockera
+        # återimport. Filtreras raden bort hittar matchningen inget, parsern
+        # skapar passet på nytt vid nästa körning, och ett pass du dolt - en
+        # klocka som startade av sig själv, en dubblett - kommer tillbaka.
+        # Tidssteget nedan filtrerar, eftersom det inte är en identitet.
         rad = conn.execute(
             "SELECT id FROM workout WHERE external_id = ? ORDER BY id LIMIT 1",
             (hk_uuid,)).fetchone()

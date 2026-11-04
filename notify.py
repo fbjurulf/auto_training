@@ -20,6 +20,7 @@ from pathlib import Path
 
 import blockdata
 import hojd
+import passdata
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -91,10 +92,8 @@ def rad(*delar):
 
 def tempo(seg):
     """Sekunder per km ur segmentets egna tal - fältet pace_s_per_km
-    fylls bara av den gamla HAE-parsern och är tomt för FIT-pass."""
-    d = seg["distance_m"] or 0
-    return (seg["duration_s"] / (d / 1000.0)
-            if d > 50 and seg["duration_s"] else None)
+    fylls bara av HAE-parsern och är tomt för FIT-pass."""
+    return passdata.tempo_per_km(seg["duration_s"], seg["distance_m"])
 
 
 def fmt_run(conn, w):
@@ -224,9 +223,9 @@ def zontext(conn, workout_id, duration_s):
         return None
     delar = " · ".join(f"{r['zone']} {hms(r['seconds'])}"
                        for r in rader if r["seconds"] >= 1)
-    tackt = sum(r["seconds"] for r in rader)
-    if duration_s and tackt < duration_s * 0.95:
-        delar += f" ({num(100.0 * tackt / duration_s, 0)} % puls)"
+    andel = passdata.pulstackning([r["seconds"] for r in rader], duration_s)
+    if passdata.visa_tackning(andel):
+        delar += f" ({num(100.0 * andel, 0)} % puls)"
     return delar
 
 

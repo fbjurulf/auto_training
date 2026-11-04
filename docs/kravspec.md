@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 75 tester.
+  parsrarna. Sviten har 79 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -252,17 +252,31 @@ mönstret.
 Kända dubbelberäkningar att åtgärda:
 
 1. **Settempo för simning** räknas på varvets hela tid, medan rubriktempot
-   räknas på aktiv simtid. Settempot ska räknas på de aktiva längdernas tid
-   inom varvet. För 10-21 är skillnaden 2:15 mot 2:03 per 100 m.
-2. **Tempo per kilometer** räknas i `notify.py` med en egen funktion och i
-   `weekly.py` på sitt eget sätt. Ingen gemensam funktion finns.
-3. **Höjdmeter** (del B) ska byggas som en delad funktion från början.
-4. **Pulszoner** läses från databasen av båda, vilket är rätt — men
-   täckningsgraden räknas på två ställen.
+   räknas på aktiv simtid. Beslut: "Tid" visar aktiv simtid, avbrott inne i
+   setet märks med fotnot ("2:05* — innehåller 0:16 avbrott") och räknas in
+   i totalen. **Väntar på beslut (2026-11-04):** tiden i varvet utanför
+   aktiva längder är i de flesta set vändningar, inte stopp — 0 s för 25
+   m-varv, 3–8 s för 100 m med tre vändningar, 10–31 s där det troligen
+   finns ett riktigt stopp. Som regeln står får nästan varje set fotnot. Och
+   Träningsappen visar setets hela tid: facit för 09-30 säger 200 m på 4:38
+   (varvtiden 278 s), de aktiva längderna summerar till 4:15.
+2. **Tempo per kilometer** — gjort: `passdata.tempo_per_km`.
+3. **Höjdmeter** — gjort i del B: `hojd.py`.
+4. **Pulstäckning** — gjort: `passdata.pulstackning` och `visa_tackning`.
+   Veckonivåns täckning (gräns 99,5 %) hör till A4/A5.
+
+Stående test: `tests/test_samma_tal.py` jämför de renderade talen i notify
+och weekly för varje pass i fixturerna — blocktempo, pulstäckning, höjd,
+snitttempo. Det jämför texterna, inte funktionerna, så att det syns om en
+modul börjar räkna själv igen. Verifierat att det blir rött när notify räknar
+annorlunda.
 
 **Dolda pass:** alla nya frågor går mot vyerna. Går något direkt mot
 `workout` ska `deleted_at IS NULL` och `duplicate_of_id IS NULL` stå med
-explicit.
+explicit. Granskat 2026-11-04: alla direkta frågor filtrerar eller arbetar
+med avsikt på ett bestämt id. **Undantag med avsikt:** UUID-steget i
+`matchning.py` får inte filtrera — en dold rad ska blockera återimport, och
+filtreras den bort kommer passet tillbaka.
 
 ---
 
