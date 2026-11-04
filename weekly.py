@@ -54,7 +54,6 @@ VILOPULS_OVER = 5       # slag över 28-dagarsmedianen
 HRV_ANDEL = 0.75        # andel av medianen - under detta flaggas dygnet
 STEG_ANDEL = 0.40       # andel av medianen - under detta är dagen påfallande stillasittande
 BASLINJE_MIN_DAGAR = 10 # färre än så: ingen jämförelse alls
-VANDNING_MAX_S = 12     # kortare avbrott i simningen är en vändning, inte vila
 LUGNA_ZONER = ("Z1-Z2",)  # zoner som räknas som lugn träning i 80/20-måttet
 ZON_MAL = 80            # andel av träningstiden som bör ligga lugnt
 
@@ -730,23 +729,37 @@ def build_report(conn, start: date, end: date, now=None) -> str:
                 L.append("")
                 L.append("| Set | Distans | Tid | Tempo/100 m | Puls | Stil |")
                 L.append("|---|---|---|---|---|---|")
+                fotnoter = []
                 for i, s in enumerate(sets, 1):
                     ex = json.loads(s["extra"]) if s["extra"] else {}
                     dist = s["distance_m"] or 0
                     if s["kind"] == "rest" or dist <= 0:
-                        # Ett kort avbrott är en vändning, inte vila - och
-                        # bryter inte den sammanhängande sträckan.
-                        vad = ("vändning"
-                               if (s["duration_s"] or 0) < VANDNING_MAX_S else "vila")
-                        L.append(f"| {i} | {vad} | {hms(s['duration_s'])} | | "
-                                 f"{s['hr_avg'] or '-'} | |")
+                        # Stopp eller vändning avgjordes vid tolkningen, med
+                        # samma funktion som bryter längsta sammanhängande
+                        # sträcka. HAE-set saknar längder och faller tillbaka
+                        # på vilans egen tid mot samma gräns.
+                        stopp = ex.get("stopp")
+                        if stopp is None:
+                            stopp = passdata.ar_stopp(s["duration_s"] or 0)
+                        L.append(f"| {i} | {'vila' if stopp else 'vändning'} "
+                                 f"| {hms(s['duration_s'])} | | {s['hr_avg'] or '-'} | |")
                         continue
-                    # Tempot räknas här, inte ur segmentets extra-fält:
-                    # det fylls bara av den gamla HAE-parsern.
-                    tempo = passdata.tempo_per_100m(s["duration_s"], dist)
-                    L.append(f"| {i} | {n(dist, 0)} m | {hms(s['duration_s'])} "
+                    # Tid är setets tid utan stopp - aktiva längder och
+                    # vändningar. Ett stopp inne i setet märks i stället för
+                    # att flyttas: ett 100-meterssett med stopp vid väggen är
+                    # inte ett sammanhängande 100-meterssett (D1).
+                    avbrott = ex.get("avbrott_s") or 0
+                    tid = (s["duration_s"] or 0) - avbrott
+                    tempo = passdata.tempo_per_100m(tid, dist)
+                    markering = "*" if avbrott else ""
+                    if avbrott:
+                        fotnoter.append(f"* Set {i} innehåller {hms(avbrott)} avbrott.")
+                    L.append(f"| {i} | {n(dist, 0)} m | {hms(tid)}{markering} "
                              f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
                              f"| {ex.get('swim_stroke') or '-'} |")
+                if fotnoter:
+                    L.append("")
+                    L.extend(fotnoter)
 
                 if not har_fit:
                     L.append("")

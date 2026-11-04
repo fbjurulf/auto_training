@@ -28,6 +28,7 @@ from pathlib import Path
 import fitdecode
 
 import hojd
+import passdata
 from matchning import find_workout, record_match
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,7 +40,6 @@ SOURCE_CODE = "healthfit_fit"
 HAE_SOURCE = "apple_health_hae"
 RECORD_LUCKA_MAX_S = 10    # längre glapp mellan pulsvärden räknas inte som zontid
 KM_SPORTER = ("running", "hiking", "cycling", "walking")  # får km-segment
-VILA_MIN_S = 12            # kortare avbrott i simningen är en vändning, inte vila
 
 Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger("fit")
@@ -93,31 +93,45 @@ def read_fit(path):
 
 # ---------- beräkningar ----------
 
-def swim_stats(session, lengths, pool_m):
+def _langder(lengths):
+    """FIT-längder som (start, varaktighet, aktiv) för passdata."""
+    return [(l.get("start_time"), l.get("total_elapsed_time"),
+             l.get("length_type") == "active") for l in lengths]
+
+
+def lap_langder(lap, lengths):
+    """Varvets egna längder, via first_length_index ur FIT-filen."""
+    forsta = lap.get("first_length_index")
+    antal = lap.get("num_lengths") or 0
+    if forsta is None or antal <= 0:
+        return []
+    return lengths[forsta:forsta + antal]
+
+
+def swim_stats(session, lengths, pool_m, laps=()):
     """
     Allt som bara går att få ur längd-för-längd-data.
 
-    Längsta sammanhängande sträcka är den längsta följden av aktiva
-    längder utan en vilolängd emellan - det mått som inte går att
-    härleda ur minutupplösning.
+    Längsta sammanhängande sträcka är den längsta följden av aktiva längder
+    utan ett stopp emellan. Stopp avgörs av passdata - samma funktion och
+    samma gräns som fotnoten om avbrott i settabellen. Apple märker alla
+    avbrott som 'idle', även tiosekunderspauser, så typen duger inte som
+    bevis på vila; bara tiden mellan längderna gör det.
+
+    Simtiden är setens tid utan stopp: aktiva längder plus vändningarna
+    mellan dem. Settabellen räknas på samma sätt, så rubrikens tempo och
+    setens tempo går att räkna mot varandra (D1).
     """
     aktiva = [l for l in lengths if l.get("length_type") == "active"]
     vila_s = sum(l.get("total_elapsed_time") or 0
                  for l in lengths if l.get("length_type") != "active")
     aktiv_s = sum(l.get("total_elapsed_time") or 0 for l in aktiva)
+    if laps:
+        aktiv_s = sum((lap.get("total_elapsed_time") or 0)
+                      - passdata.avbrott(_langder(lap_langder(lap, lengths)))
+                      for lap in laps if (lap.get("total_distance") or 0) > 0)
 
-    # Längsta obrutna svit av aktiva längder.
-    #
-    # Apple märker alla avbrott som 'idle', även tiosekunderspauser mitt i
-    # en sammanhängande sträcka. Typen duger därför inte som bevis på vila -
-    # bara längden gör det. Under tröskeln är avbrottet en vändning.
-    langst = rad = 0
-    for l in lengths:
-        if str(l.get("length_type") or "") == "active":
-            rad += 1
-            langst = max(langst, rad)
-        elif (l.get("total_elapsed_time") or 0) >= VILA_MIN_S:
-            rad = 0
+    langst = passdata.langsta_svit(_langder(lengths))
 
     frisim = sum(1 for l in aktiva if l.get("swim_stroke") == "freestyle")
     strokes = sum(l.get("total_strokes") or 0 for l in aktiva)
@@ -334,6 +348,15 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=(),
              lap.get("avg_power"), upp, ner,
              json.dumps({k: v for k, v in (
                  ("swim_stroke", lap.get("swim_stroke")),
+                 # Stopp inne i setet (D1) - samma funktion som bryter
+                 # längsta sammanhängande sträcka.
+                 ("avbrott_s", round(passdata.avbrott(_langder(lap_langder(lap, lengths))), 1)
+                  or None if is_swim and lengths and dist > 0 else None),
+                 # Vilovarv: var uppehållet ett stopp eller en vändning?
+                 ("stopp", passdata.stopp_vid(
+                     _langder(lengths), lap.get("start_time"),
+                     lap.get("start_time") + timedelta(seconds=lap.get("total_elapsed_time") or 0))
+                  if is_swim and lengths and dist <= 0 and lap.get("start_time") else None),
                  # Avgör om varven är dina egna varvtryck eller klockans
                  # automatiska kilometermarkeringar.
                  ("lap_trigger", str(lap.get("lap_trigger"))
@@ -519,7 +542,7 @@ def main(omtolka=()):
                       serie, kilometrar)
 
         if is_swim and lengths:
-            s = swim_stats(session, lengths, pool_m)
+            s = swim_stats(session, lengths, pool_m, laps)
             conn.execute(
                 """INSERT INTO workout_swim
                    (workout_id, pool_length_m, length_count, swolf_avg, swolf_best,

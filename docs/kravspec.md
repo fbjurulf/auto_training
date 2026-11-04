@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 79 tester.
+  parsrarna. Sviten har 84 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -251,15 +251,22 @@ mönstret.
 
 Kända dubbelberäkningar att åtgärda:
 
-1. **Settempo för simning** räknas på varvets hela tid, medan rubriktempot
-   räknas på aktiv simtid. Beslut: "Tid" visar aktiv simtid, avbrott inne i
-   setet märks med fotnot ("2:05* — innehåller 0:16 avbrott") och räknas in
-   i totalen. **Väntar på beslut (2026-11-04):** tiden i varvet utanför
-   aktiva längder är i de flesta set vändningar, inte stopp — 0 s för 25
-   m-varv, 3–8 s för 100 m med tre vändningar, 10–31 s där det troligen
-   finns ett riktigt stopp. Som regeln står får nästan varje set fotnot. Och
-   Träningsappen visar setets hela tid: facit för 09-30 säger 200 m på 4:38
-   (varvtiden 278 s), de aktiva längderna summerar till 4:15.
+1. **Settempo för simning** — gjort. En regel för stopp, `passdata.VILA_MIN_S`
+   (12 s) på uppehållet mellan två aktiva längder, styr både längsta
+   sammanhängande sträcka (A6) och settabellen. Settid = varvtid minus stopp
+   inne i setet; vändningar räknas som simning. Stopp inne i ett set märks
+   "2:05*" med fotnot om avbrottet. Rubrikens simtid är summan av setens
+   tider, så rubrikens och setens tempo går ihop (10-21: 2:14/100 m, var
+   2:03 mot set på 2:15). Stopp avgörs vid tolkningen på FIT-längderna och
+   sparas (`avbrott_s` på set, `stopp` på vilovarv) — räknat ur databasens
+   sekundavrundade tider hade fotnoten och A6 kunnat säga olika saker om
+   samma paus. Två kopior av gränsen fanns (`parse_fit.VILA_MIN_S`,
+   `weekly.VANDNING_MAX_S`); båda borta. Test: `test_simstopp` visar att
+   båda följer gränsen när den flyttas.
+   **Känt:** tid före första längden och efter sista i ett varv ser regeln
+   inte — 10-21 set 1 har 31 s innan första frånskjutet, och den tiden ligger
+   i settiden. Stopp på 10–11,9 s räknas som vändning; accepterat, gränsen
+   bor på ett ställe.
 2. **Tempo per kilometer** — gjort: `passdata.tempo_per_km`.
 3. **Höjdmeter** — gjort i del B: `hojd.py`.
 4. **Pulstäckning** — gjort: `passdata.pulstackning` och `visa_tackning`.
