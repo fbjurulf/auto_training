@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 84 tester.
+  parsrarna. Sviten har 90 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -263,10 +263,15 @@ Kända dubbelberäkningar att åtgärda:
    samma paus. Två kopior av gränsen fanns (`parse_fit.VILA_MIN_S`,
    `weekly.VANDNING_MAX_S`); båda borta. Test: `test_simstopp` visar att
    båda följer gränsen när den flyttas.
-   **Känt:** tid före första längden och efter sista i ett varv ser regeln
-   inte — 10-21 set 1 har 31 s innan första frånskjutet, och den tiden ligger
-   i settiden. Stopp på 10–11,9 s räknas som vändning; accepterat, gränsen
-   bor på ett ställe.
+   **Kanttid:** tid före första längden och efter sista räknas mot samma
+   gräns och dras från settiden, men får egna ord: "* Set 1: 1:27 före
+   start" respektive "efter sista längden". En sen start är inte ett brott i
+   simningen och kan inte bryta en sammanhängande sträcka. I fixturerna
+   finns den bara i första setet: 15, 87, 29 och 29 s. Stopp på 10–11,9 s
+   räknas som vändning; accepterat, gränsen bor på ett ställe.
+   **Definitionsbyte:** rubrikens simtempo blir långsammare i alla simpass
+   (10-21: 2:03 → 2:11/100 m). Veckorapporten för v45 får en rad överst om
+   det (`weekly.DEFINITIONSBYTEN`).
 2. **Tempo per kilometer** — gjort: `passdata.tempo_per_km`.
 3. **Höjdmeter** — gjort i del B: `hojd.py`.
 4. **Pulstäckning** — gjort: `passdata.pulstackning` och `visa_tackning`.
@@ -393,22 +398,19 @@ ligger all zontid i Z1–Z2, så andelen blir 100 % oavsett.
 Handledspuls i vatten täcker ofta 19–58 % av passet. Är täckningen under
 70 % ingår passet inte i 80/20-andelen. Täckningen visas per pass som nu.
 
-## A6. Längsta sammanhängande simsträcka: två mått
+## A6. Längsta sammanhängande simsträcka: två mått — byggd 2026-11-04
 
-`VILA_MIN_S = 12` ligger kvar. Visa båda:
+- **Längsta utan stopp:** uppehåll på minst `passdata.VILA_MIN_S` (12 s)
+  bryter.
+- **Längsta med korta stopp:** uppehåll under `passdata.KORTA_STOPP_S`
+  (30 s) bryter inte.
 
-- **Längsta utan stopp** (stopp ≥ 12 s bryter)
-- **Längsta med korta stopp** (stopp under 30 s bryter inte)
-
-Det andra måttet blir stort på intervallpass med 20 sekunders vila. Det är
-okej — gissa inte vilka stopp som är vila.
-
-Kräver `longest_with_short_stops_m REAL` i `workout_swim` plus migrering
-som räknar om befintliga pass. Trösklarna som namngivna konstanter på ett
-ställe.
-
-Två testfall väntar på kolumnen: 10-07 ska ge 1000 m och 10-19 ska ge
-1200 m med korta stopp.
+Samma funktion (`passdata.langsta_svit`) med olika gräns, och samma
+uppehållsregel som settabellens fotnoter (D1). Kolumnen
+`longest_with_short_stops_m` kom med migration 0005, som också bygger om
+`v_swim` — vyn har fast kolumnlista. Testfallen är gröna: 10-07 ger 1 000 m
+och 10-19 ger 1 200 m med korta stopp. Det andra måttet blir stort på
+intervallpass med kort vila; det är avsett.
 
 ## A7. Mindre saker
 
@@ -459,7 +461,7 @@ höjdfunktionen är ett av D:s fall. D före C eftersom C annars skrivs två
 gånger. F3 sist av det tekniska, eftersom B måste ha sparat höjdmetrarna
 först.
 
-Testerna körs efter varje del. Sviten har i dag ett rött test (A4) och två
-överhoppade (A6 ×2). De blir gröna av att felen
+Testerna körs efter varje del. Sviten har i dag ett rött test (A4) och inga
+överhoppade. De blir gröna av att felen
 åtgärdas, inte av att testen justeras — om ett förväntat värde inte stämmer
 med databasen, säg till i stället för att anpassa testet.

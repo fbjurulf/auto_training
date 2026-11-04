@@ -47,6 +47,16 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 
 DAGAR = ["mån", "tis", "ons", "tor", "fre", "lör", "sön"]
 
+# (dag, text): visas överst i rapporten för veckan som innehåller dagen.
+DEFINITIONSBYTEN = [
+    (date(2026, 11, 4),
+     "Simtempot räknas från och med denna vecka på setens tid med vändningarna "
+     "inräknade, och tid stillastående vid väggen före start räknas bort. Alla "
+     "simpass är omräknade. Äldre rapporter visar ett snabbare tempo enligt den "
+     "gamla definitionen - till exempel 2:03 per 100 m för 2026-10-21, som nu "
+     "är 2:11. Det är en ändrad beräkning, inte en förändring i simningen."),
+]
+
 # Gränser för vad som räknas som avvikande dygn.
 SOMN_LAG = 6.0          # timmar - under detta flaggas natten
 SOMN_MYCKET_LAG = 5.0
@@ -446,6 +456,14 @@ def build_report(conn, start: date, end: date, now=None) -> str:
     L.append(f"{start.isoformat()} till {end.isoformat()}")
     L.append("")
 
+    # När ett mått byter definition ska den första rapporten efteråt säga
+    # det högst upp - rapporterna klistras in där träningsplanen följs, och
+    # ett hopp i ett tal får inte se ut som en förändring i formen.
+    for datum_, text in DEFINITIONSBYTEN:
+        if start <= datum_ <= end:
+            L.append(f"**Obs:** {text}")
+            L.append("")
+
     # Komplett eller pågående vecka
     if end < idag:
         L.append("Veckan är komplett.")
@@ -680,12 +698,15 @@ def build_report(conn, start: date, end: date, now=None) -> str:
         elif det and w["sport_code"].startswith("swim"):
             har_fit = det["active_s"] is not None
 
-            # Längsta sammanhängande sträcka först - det är passets
-            # viktigaste tal och ska inte gå att förväxla med totaldistans.
+            # Längsta sammanhängande sträcka först - passets viktigaste tal,
+            # och det ska inte gå att förväxla med totaldistans. Två mått
+            # (A6): utan stopp, och med korta stopp som inte bryter.
             if det["longest_continuous_m"]:
-                L.append(f"**Längsta sammanhängande: "
-                         f"{n(det['longest_continuous_m'], 0)} m** "
-                         f"av totalt {n(w['distance_m'], 0)} m")
+                rad = (f"**Längsta utan stopp: {n(det['longest_continuous_m'], 0)} m**")
+                if det["longest_with_short_stops_m"]:
+                    rad += (f" · **längsta med korta stopp: "
+                            f"{n(det['longest_with_short_stops_m'], 0)} m**")
+                L.append(f"{rad} av totalt {n(w['distance_m'], 0)} m")
 
             extra = []
             if det["pool_length_m"]:
@@ -748,12 +769,19 @@ def build_report(conn, start: date, end: date, now=None) -> str:
                     # vändningar. Ett stopp inne i setet märks i stället för
                     # att flyttas: ett 100-meterssett med stopp vid väggen är
                     # inte ett sammanhängande 100-meterssett (D1).
+                    # Tid före första längden är en sen start och tid efter
+                    # sista ett sent stopp - inte avbrott. De får egna ord så
+                    # att de inte läses som ett brott i simningen.
                     avbrott = ex.get("avbrott_s") or 0
-                    tid = (s["duration_s"] or 0) - avbrott
+                    fore = ex.get("fore_start_s") or 0
+                    efter = ex.get("efter_sista_s") or 0
+                    tid = (s["duration_s"] or 0) - avbrott - fore - efter
                     tempo = passdata.tempo_per_100m(tid, dist)
-                    markering = "*" if avbrott else ""
-                    if avbrott:
-                        fotnoter.append(f"* Set {i} innehåller {hms(avbrott)} avbrott.")
+                    markering = "*" if avbrott or fore or efter else ""
+                    for sek, text in ((fore, "före start"), (avbrott, "avbrott inne i setet"),
+                                      (efter, "efter sista längden")):
+                        if sek:
+                            fotnoter.append(f"* Set {i}: {hms(sek)} {text}.")
                     L.append(f"| {i} | {n(dist, 0)} m | {hms(tid)}{markering} "
                              f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
                              f"| {ex.get('swim_stroke') or '-'} |")

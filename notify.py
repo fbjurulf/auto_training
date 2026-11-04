@@ -159,8 +159,9 @@ def fmt_swim(conn, w):
             f"{mmss(w['pace_s_per_100m'])}/100 m simtid" if w["pace_s_per_100m"] else None),
     ]
     if w["longest_continuous_m"]:
-        rader.append(f"Längsta sammanhängande: "
-                     f"<b>{num(w['longest_continuous_m'])} m</b>")
+        rader.append(f"Längsta utan stopp: <b>{num(w['longest_continuous_m'])} m</b>"
+                     + (f" · med korta stopp: <b>{num(w['longest_with_short_stops_m'])} m</b>"
+                        if w["longest_with_short_stops_m"] else ""))
     rader += [
         rad(f"{w['length_count']} längder" if w["length_count"] else None,
             f"{num(w['freestyle_share'] * 100, 0)} % frisim"

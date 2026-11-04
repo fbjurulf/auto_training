@@ -38,6 +38,16 @@ class StopRuleTests(unittest.TestCase):
                                            T0 + timedelta(seconds=44)))
 
 
+class EdgeTimeTests(unittest.TestCase):
+    def test_time_before_first_length_is_late_start(self):
+        langder = [_l(31, 25), _l(59, 25)]
+        self.assertEqual(passdata.kanttid(T0, 84, langder), (31, 0))
+        self.assertEqual(passdata.avbrott(langder), 0, "en sen start är inget avbrott")
+
+    def test_short_edges_count_as_swimming(self):
+        self.assertEqual(passdata.kanttid(T0, 62, [_l(5, 25), _l(30, 25)]), (0, 0))
+
+
 class SameLimitTests(unittest.TestCase):
     """Flyttas gränsen ändras både A6 och fotnoterna - de läser samma funktion."""
 
@@ -83,6 +93,26 @@ class ReportTests(unittest.TestCase):
         cls.conn.close()
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
+    def _sektion(self, dag):
+        import weekly
+        from datetime import date
+        d = date.fromisoformat(dag)
+        mon = d - timedelta(days=d.weekday())
+        r = weekly.build_report(self.conn, mon, mon + timedelta(days=6)).splitlines()
+        i = next(i for i, l in enumerate(r) if l.startswith("### ") and dag in l and "Sim" in l)
+        j = next((j for j in range(i + 1, len(r)) if r[j].startswith("#")), len(r))
+        return "\n".join(r[i:j])
+
+    def test_late_start_gets_its_own_footnote(self):
+        # 2026-10-07: 87 s vid väggen före första frånskjutet i set 1.
+        sektion = self._sektion("2026-10-07")
+        self.assertIn("* Set 1: 1:27 före start.", sektion)
+        self.assertNotIn("Set 1: 1:27 avbrott", sektion)
+
+    def test_both_a6_measures_in_report(self):
+        sektion = self._sektion("2026-10-07")
+        self.assertIn("**Längsta utan stopp: 375 m** · **längsta med korta stopp: 1000 m**", sektion)
+
     def test_set_times_add_up_to_header_swim_time(self):
         # Rubrikens simtid och setens tid räknas likadant - tempot går ihop.
         for dag in ("2026-09-30", "2026-10-07", "2026-10-19"):
@@ -94,7 +124,8 @@ class ReportTests(unittest.TestCase):
                                           (w["id"],)).fetchone()[0]
                 import json
                 summa = sum(
-                    s["duration_s"] - (json.loads(s["extra"] or "{}").get("avbrott_s") or 0)
+                    s["duration_s"] - sum(json.loads(s["extra"] or "{}").get(k) or 0
+                                          for k in ("avbrott_s", "fore_start_s", "efter_sista_s"))
                     for s in self.conn.execute(
                         """SELECT duration_s, extra FROM workout_segment WHERE workout_id=?
                            AND parent_id IS NULL AND distance_m > 0""", (w["id"],)))

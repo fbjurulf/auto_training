@@ -108,6 +108,17 @@ def lap_langder(lap, lengths):
     return lengths[forsta:forsta + antal]
 
 
+def set_stopp(lap, lengths):
+    """
+    (avbrott, före start, efter sista längden) för ett set, i sekunder.
+    Samma värden ger rubrikens simtid och settabellens fotnoter - räknade
+    här, en gång, på FIT-längderna.
+    """
+    egna = _langder(lap_langder(lap, lengths))
+    fore, efter = passdata.kanttid(lap.get("start_time"), lap.get("total_elapsed_time"), egna)
+    return passdata.avbrott(egna), fore, efter
+
+
 def swim_stats(session, lengths, pool_m, laps=()):
     """
     Allt som bara går att få ur längd-för-längd-data.
@@ -127,11 +138,11 @@ def swim_stats(session, lengths, pool_m, laps=()):
                  for l in lengths if l.get("length_type") != "active")
     aktiv_s = sum(l.get("total_elapsed_time") or 0 for l in aktiva)
     if laps:
-        aktiv_s = sum((lap.get("total_elapsed_time") or 0)
-                      - passdata.avbrott(_langder(lap_langder(lap, lengths)))
+        aktiv_s = sum((lap.get("total_elapsed_time") or 0) - sum(set_stopp(lap, lengths))
                       for lap in laps if (lap.get("total_distance") or 0) > 0)
 
     langst = passdata.langsta_svit(_langder(lengths))
+    langst_korta = passdata.langsta_svit(_langder(lengths), passdata.KORTA_STOPP_S)
 
     frisim = sum(1 for l in aktiva if l.get("swim_stroke") == "freestyle")
     strokes = sum(l.get("total_strokes") or 0 for l in aktiva)
@@ -171,6 +182,7 @@ def swim_stats(session, lengths, pool_m, laps=()):
         "rest_s_total": round(vila_s),
         "active_s": round(aktiv_s),
         "longest_continuous_m": langst * pool_m if pool_m else None,
+        "longest_with_short_stops_m": langst_korta * pool_m if pool_m else None,
         "freestyle_share": round(frisim / len(aktiva), 3) if aktiva else None,
     }
 
@@ -333,6 +345,8 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=(),
             kind = "interval" if is_swim else "split"
         upp, ner = (None, None) if is_swim else hojd_inom(
             lap.get("start_time"), lap.get("total_elapsed_time"))
+        stopp = (set_stopp(lap, lengths) if is_swim and lengths and dist > 0
+                 else (0, 0, 0))
 
         conn.execute(
             """INSERT INTO workout_segment
@@ -350,8 +364,9 @@ def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=(),
                  ("swim_stroke", lap.get("swim_stroke")),
                  # Stopp inne i setet (D1) - samma funktion som bryter
                  # längsta sammanhängande sträcka.
-                 ("avbrott_s", round(passdata.avbrott(_langder(lap_langder(lap, lengths))), 1)
-                  or None if is_swim and lengths and dist > 0 else None),
+                 ("avbrott_s", round(stopp[0], 1) or None),
+                 ("fore_start_s", round(stopp[1], 1) or None),
+                 ("efter_sista_s", round(stopp[2], 1) or None),
                  # Vilovarv: var uppehållet ett stopp eller en vändning?
                  ("stopp", passdata.stopp_vid(
                      _langder(lengths), lap.get("start_time"),
@@ -548,8 +563,8 @@ def main(omtolka=()):
                    (workout_id, pool_length_m, length_count, swolf_avg, swolf_best,
                     stroke_count_total, strokes_per_length_avg, pace_s_per_100m,
                     primary_stroke, rest_s_total, active_s, longest_continuous_m,
-                    freestyle_share)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    longest_with_short_stops_m, freestyle_share)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(workout_id) DO UPDATE SET
                      pool_length_m=excluded.pool_length_m,
                      length_count=excluded.length_count,
@@ -560,11 +575,13 @@ def main(omtolka=()):
                      primary_stroke=excluded.primary_stroke,
                      rest_s_total=excluded.rest_s_total, active_s=excluded.active_s,
                      longest_continuous_m=excluded.longest_continuous_m,
+                     longest_with_short_stops_m=excluded.longest_with_short_stops_m,
                      freestyle_share=excluded.freestyle_share""",
                 (workout_id, s["pool_length_m"], s["length_count"], s["swolf_avg"],
                  s["swolf_best"], s["stroke_count_total"], s["strokes_per_length_avg"],
                  s["pace_s_per_100m"], s["primary_stroke"], s["rest_s_total"],
-                 s["active_s"], s["longest_continuous_m"], s["freestyle_share"]))
+                 s["active_s"], s["longest_continuous_m"], s["longest_with_short_stops_m"],
+                 s["freestyle_share"]))
 
         elif session.get("sport") == "running":
             dist = session.get("total_distance") or 0

@@ -75,6 +75,19 @@ class SameNumbersTests(unittest.TestCase):
                 monster = r"upp \d+ m, ner \d+ m(?: \(Apple anger \d+ m)?"
                 self.assertEqual(re.findall(monster, kort), re.findall(monster, vecka))
 
+    def test_longest_swim_distances(self):
+        for w, kort, vecka in _par():
+            if not w["sport_code"].startswith("swim"):
+                continue
+            with self.subTest(dag=w["local_date"]):
+                # Notify skriver 1 000 med tusentalsmellanrum, weekly 1000 -
+                # formateringen får skilja sig, talen inte.
+                tal = r"([\d\s]+)"
+                i_kort = re.findall(rf"utan stopp: <b>{tal} m</b>(?: · med korta stopp: <b>{tal} m</b>)?", kort)
+                i_vecka = re.findall(rf"utan stopp: {tal} m\*\*(?: · \*\*längsta med korta stopp: {tal} m)?", vecka)
+                rensa = lambda par: [tuple(re.sub(r"\s", "", x) for x in p) for p in par]
+                self.assertEqual(rensa(i_kort), rensa(i_vecka))
+
     def test_average_pace(self):
         for w, kort, vecka in _par():
             if not w["sport_code"].startswith("run"):

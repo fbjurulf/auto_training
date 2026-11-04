@@ -33,6 +33,17 @@ class StatusTests(unittest.TestCase):
         self.assertIsNone(self._status(timedelta(days=2), source="manual"))
 
 
+class DefinitionNoticeTests(unittest.TestCase):
+    def test_notice_only_in_week_of_change(self):
+        import weekly
+        conn = build_db()
+        conn.row_factory = sqlite3.Row
+        v45 = weekly.build_report(conn, date(2026, 11, 2), date(2026, 11, 8))
+        v46 = weekly.build_report(conn, date(2026, 11, 9), date(2026, 11, 15))
+        self.assertIn("**Obs:** Simtempot räknas", v45.split("## ")[0])
+        self.assertNotIn("Simtempot räknas", v46)
+
+
 class MarkingTests(unittest.TestCase):
     def test_report_marks_hae_pass_after_alarm_has_stopped(self):
         # Larmet tystnar efter 14 dygn - rapporten ska ändå visa HAE-passet.

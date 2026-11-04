@@ -13,6 +13,10 @@ TEMPO_MIN_M = 50          # kortare segment ger inget meningsfullt tempo
 # längsta sammanhängande sträcka bryts (A6) och vilka set som får fotnoten
 # om avbrott (D1) - så de två kan aldrig säga olika saker om samma paus.
 VILA_MIN_S = 12
+# A6: det andra måttet, längsta sträcka där stopp under detta inte bryter.
+# Blir stort på intervallpass med 20 s vila - det är okej, gissa inte vilka
+# stopp som är vila.
+KORTA_STOPP_S = 30
 
 
 def uppehall(langder):
@@ -67,6 +71,24 @@ def avbrott(langder, grans=None):
     """Summan av stopp på minst gränsen mellan aktiva längder - inom ett set."""
     grans = VILA_MIN_S if grans is None else grans
     return sum(p for p in pauser(langder) if ar_stopp(p, grans))
+
+
+def kanttid(varv_start, varv_s, langder, grans=None):
+    """
+    (före start, efter sista längden) i ett set, i sekunder - var för sig
+    bara om den når gränsen, annars 0. Tid vid väggen före första
+    frånskjutet är en sen start, inte ett brott i simningen: den kan inte
+    bryta en sammanhängande sträcka, för det finns inget före den. Därför
+    hålls den isär från avbrott.
+    """
+    aktiva = [(t, d or 0) for t, d, a in langder if a and t is not None]
+    if not aktiva or varv_start is None:
+        return 0, 0
+    fore = (aktiva[0][0] - varv_start).total_seconds()
+    slut = varv_start + timedelta(seconds=varv_s or 0)
+    efter = (slut - (aktiva[-1][0] + timedelta(seconds=aktiva[-1][1]))).total_seconds()
+    return (fore if ar_stopp(fore, grans) else 0,
+            efter if ar_stopp(efter, grans) else 0)
 
 
 TACKNING_VISA = 0.95      # pulstäckning under detta skrivs ut per pass
