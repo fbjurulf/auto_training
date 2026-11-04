@@ -27,6 +27,7 @@ RAW_IMPORT_MAX_AGE = timedelta(days=3)
 # upprepas dagligen i två veckor, sedan anses passet förlorat för FIT.
 FIT_MISSING_AFTER = timedelta(hours=24)
 FIT_MISSING_WINDOW = timedelta(days=14)
+OVERLAP_SHARE = 0.5  # andel av det kortare passet
 HEALTH_DATA_MAX_AGE_DAYS = 2
 DROPBOX_PATH = "dropbox:Apps/HealthFitExporter"
 SERVICES = ("traning-ingest", "traning-bot")
@@ -101,6 +102,36 @@ def database_alerts(conn, now):
         alerts.append(
             "Pass utan FIT-fil efter 24 h, bara HAE-data: "
             + ", ".join(f"{m[1]} {m[2]} (pass {m[0]})" for m in missing) + ".")
+
+    # A8: två pass av samma sport som överlappar är en dubblett som ingen
+    # external_id-jämförelse hittar - den enda kontroll som fångar en FIT-fil
+    # utan UUID som fått ett HAE-pass bredvid sig.
+    overlap = conn.execute(
+        """SELECT a.id, b.id, a.local_date, a.sport_name FROM v_workout a
+           JOIN v_workout b ON a.id < b.id AND a.sport_id = b.sport_id
+            AND a.started_at < b.ended_at AND b.started_at < a.ended_at
+           WHERE (MIN(strftime('%s', a.ended_at), strftime('%s', b.ended_at))
+                  - MAX(strftime('%s', a.started_at), strftime('%s', b.started_at)))
+                 > ? * MIN(strftime('%s', a.ended_at) - strftime('%s', a.started_at),
+                           strftime('%s', b.ended_at) - strftime('%s', b.started_at))
+           ORDER BY a.started_at""", (OVERLAP_SHARE,)).fetchall()
+    if overlap:
+        alerts.append(
+            "Möjliga dubbletter, samma sport och mer än 50 % överlapp: "
+            + ", ".join(f"{o[2]} {o[3]} (pass {o[0]} och {o[1]})" for o in overlap) + ".")
+
+    # Matchningar på starttid kan slå ihop två olika pass - de ska synas när
+    # de händer. Vakthunden körs dagligen, så ett dygn bakåt räcker.
+    by_time = conn.execute(
+        """SELECT m.workout_id, w.local_date, w.sport_name, s.code
+           FROM workout_match m JOIN v_workout w ON w.id = m.workout_id
+           JOIN source s ON s.id = m.source_id
+           WHERE m.method = 'tid' AND m.matched_at > ? ORDER BY m.matched_at""",
+        ((now - timedelta(hours=24)).strftime(fmt),)).fetchall()
+    if by_time:
+        alerts.append(
+            "Matchat på starttid i stället för UUID - kontrollera att det är samma pass: "
+            + ", ".join(f"{t[1]} {t[2]} (pass {t[0]}, från {t[3]})" for t in by_time) + ".")
     return alerts
 
 

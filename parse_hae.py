@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from matchning import find_workout, record_match
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 LOG_PATH = os.environ.get("TRANING_PARSE_LOG", str(BASE_DIR / "logs" / "parse.log"))
@@ -334,6 +336,8 @@ def main():
 
     src_id = conn.execute(
         "SELECT id FROM source WHERE code='apple_health_hae'").fetchone()["id"]
+    fit_src_id = conn.execute(
+        "SELECT id FROM source WHERE code='healthfit_fit'").fetchone()["id"]
     run_id = conn.execute(
         """INSERT INTO import_run (source_id, run_type, started_at)
            VALUES (?, 'push', ?)""", (src_id, to_utc_str(datetime.now(timezone.utc)))
@@ -370,11 +374,18 @@ def main():
 
             # HealthFit laddar upp direkt efter passet, HAE kör på schema -
             # FIT hinner ofta först. Finns passet redan från FIT ska HAE inte
-            # skapa ett andra: FIT:s data är rikare på varenda punkt.
-            if conn.execute(
-                """SELECT 1 FROM workout w JOIN source s ON s.id = w.source_id
-                   WHERE s.code = 'healthfit_fit' AND w.external_id = ?""",
-                (w["id"],)).fetchone():
+            # skapa ett andra: FIT:s data är rikare på varenda punkt. Samma
+            # matchning som parse_fit (A8): UUID, annars sport och starttid -
+            # en FIT-fil utan UUID har en filhash som external_id.
+            match_id, hur = find_workout(conn, w["id"], to_utc_str(parse_dt(w["start"])),
+                                         sport_id)
+            if match_id is not None and conn.execute(
+                    "SELECT source_id FROM workout WHERE id=?",
+                    (match_id,)).fetchone()["source_id"] == fit_src_id:
+                record_match(conn, match_id, src_id, w["id"], hur)
+                if hur == "tid":
+                    logger.warning("HAE-pass %s (%s) matchat på starttid mot FIT-pass %s",
+                                   w["id"], name, match_id)
                 skipped += 1
                 continue
             befintligt = conn.execute(

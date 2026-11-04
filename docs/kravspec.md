@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 53 tester.
+  parsrarna. Sviten har 58 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -54,6 +54,12 @@ siffra som saknas.
   att `session/stop_all` ignorerades så att sista blocket aldrig stängdes.
   `blockdata.py` delas av weekly och notify. Block utan innehåll slås ihop
   med fotnot. 40 pass omtolkade.
+- **A8.** Dubbletter. `matchning.py` delas av parse_fit och parse_hae: UUID,
+  annars samma sport och starttid inom fem minuter. Varje matchning mellan
+  källor sparas i `workout_match` (migration 0003); vakthunden larmar på
+  tidsmatchningar det senaste dygnet och på pass av samma sport som
+  överlappar mer än 50 %. Testat: en FIT-fil utan UUID följd av HAE gav två
+  pass med den gamla regeln och ger ett nu.
 - **Drift.** `ingest_app.py` kör pipelinen under `flock`. 218 dubblettrader
   i `raw_import` markerade `ignored`. Alias för längdskidor, badminton och
   vandring inlagda.
@@ -109,7 +115,7 @@ I produktionen varnade regeln först för tre pass som den gamla släppte
 igenom. Två var svansar: 48 (07-30, FIT, sista 44 s) och 94 (10-27, bara
 HAE, sista 36 s) — de får fotnot. Det tredje, 93, var ett A3-offer.
 
-## A8. Dubbletter — utredd 2026-11-04
+## A8. Dubbletter — utredd och byggd 2026-11-04
 
 **10-04 är inte ett UUID-löst par.** FIT-filen har UUID (`E4F1DA28-…`) och
 hör inte till de åtta utan. Förloppet, ur loggarna:

@@ -27,6 +27,8 @@ from pathlib import Path
 
 import fitdecode
 
+from matchning import find_workout, record_match
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 FIT_DIR = Path(os.environ.get("TRANING_FIT_DIR", str(BASE_DIR / "fit")))
@@ -34,7 +36,6 @@ LOG_PATH = os.environ.get("TRANING_FIT_LOG", str(BASE_DIR / "logs" / "fit.log"))
 
 SOURCE_CODE = "healthfit_fit"
 HAE_SOURCE = "apple_health_hae"
-MATCH_FONSTER_S = 300      # starttidsmatchning mot befintligt pass
 RECORD_LUCKA_MAX_S = 10    # längre glapp mellan pulsvärden räknas inte som zontid
 VILA_MIN_S = 12            # kortare avbrott i simningen är en vändning, inte vila
 
@@ -270,25 +271,6 @@ def zone_seconds(conn, records):
 
 # ---------- persistering ----------
 
-def find_workout(conn, hk_uuid, start_utc, sport_id):
-    """Steg 1: exakt UUID-match. Steg 2: starttid inom fönstret."""
-    if hk_uuid:
-        # Söker i alla källor, inte bara HAE: passet kan redan ha skapats
-        # av en tidigare FIT-körning.
-        rad = conn.execute(
-            "SELECT id FROM workout WHERE external_id = ? ORDER BY id LIMIT 1",
-            (hk_uuid,)).fetchone()
-        if rad:
-            return rad["id"], "uuid"
-
-    rad = conn.execute(
-        """SELECT id, ABS(strftime('%s', started_at) - strftime('%s', ?)) diff
-           FROM workout WHERE sport_id = ? AND diff <= ?
-           ORDER BY diff LIMIT 1""",
-        (start_utc, sport_id, MATCH_FONSTER_S)).fetchone()
-    return (rad["id"], "tid") if rad else (None, None)
-
-
 def save_segments(conn, workout_id, laps, lengths, is_swim, pool_m, blocks=()):
     """
     Varv blir segment, simlängder hängs under sitt varv via parent_id.
@@ -471,6 +453,9 @@ def main(omtolka=()):
                      fit_enriched=1
                    WHERE id=?""", gemensamt + (workout_id,))
             berikade += 1
+            if conn.execute("SELECT source_id FROM workout WHERE id=?",
+                            (workout_id,)).fetchone()["source_id"] != src_id:
+                record_match(conn, workout_id, src_id, hk or digest[:32], hur)
         else:
             lokal = start.astimezone() if start else None
             conn.execute(

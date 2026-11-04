@@ -103,6 +103,39 @@ class FitMissingTests(unittest.TestCase):
         self.assertEqual(watchdog.database_alerts(self.conn, self.now), [])
 
 
+class OverlapTests(unittest.TestCase):
+    def setUp(self):
+        self.conn = build_db()
+        _raw_import(self.conn, "2026-11-04T07:00:00Z")
+        _daily_metric(self.conn, "2026-11-04")
+        self.now = datetime(2026, 11, 4, 8, tzinfo=timezone.utc)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def _workout(self, external_id, start, end, sport="run", source="healthfit_fit"):
+        return self.conn.execute(
+            """INSERT INTO workout (source_id, external_id, sport_id, started_at, ended_at,
+                 local_date, duration_s, fit_enriched)
+               VALUES (?, ?, (SELECT id FROM sport WHERE code=?), ?, ?, ?, 600, 1)""",
+            (_source_id(self.conn, source), external_id, sport, start, end, start[:10])).lastrowid
+
+    def test_same_sport_overlap_over_half_alerts(self):
+        # FIT utan UUID och ett HAE-pass för samma löprunda.
+        a = self._workout("a" * 32, "2026-11-01T10:00:00Z", "2026-11-01T11:00:00Z")
+        b = self._workout("B-UUID", "2026-11-01T10:02:00Z", "2026-11-01T11:01:00Z",
+                          source="apple_health_hae")
+        alerts = watchdog.database_alerts(self.conn, self.now)
+        self.assertEqual(alerts, ["Möjliga dubbletter, samma sport och mer än 50 % överlapp: "
+                                  f"2026-11-01 Löpning (pass {a} och {b})."])
+
+    def test_small_overlap_or_other_sport_does_not_alert(self):
+        self._workout("x1", "2026-11-01T10:00:00Z", "2026-11-01T11:00:00Z")
+        self._workout("x2", "2026-11-01T10:50:00Z", "2026-11-01T11:50:00Z")
+        self._workout("x3", "2026-11-01T10:05:00Z", "2026-11-01T10:55:00Z", sport="hike")
+        self.assertEqual(watchdog.database_alerts(self.conn, self.now), [])
+
+
 def _source_id(conn, code):
     return conn.execute("SELECT id FROM source WHERE code = ?", (code,)).fetchone()[0]
 
