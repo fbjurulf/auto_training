@@ -170,8 +170,25 @@ för båda källorna, enligt del D.
   rapport som upprepade det utan att kontrollera. `elevation_loss_m` har
   helt enkelt aldrig skrivits.
 
-Jämför passets härledda stigning mot `session.total_ascent`, som finns och
-är Apples eget värde. Avviker de mycket är tröskeln fel satt.
+~~Jämför passets härledda stigning mot `session.total_ascent`. Avviker de
+mycket är tröskeln fel satt.~~ **Struken 2026-11-04: Apple är ingen
+kontrollpunkt.** Apples värde varierar kraftigt på samma rutt — samma 7,1
+km-runda gav 10, 93 och 26 m; en 9,3 km-runda 56, 58 och 57 m, sedan 78, 85
+och 84 m. Ett värde som inte är stabilt mot sig självt kan inte avgöra om
+tröskeln är rätt. Apples tal sparas (`ascent_apple_m`) och visas när det
+skiljer mer än 25 %, men formulerat så att det inte läses som facit: "upp
+102 m (Apple anger 31 m — Apples värde varierar kraftigt på samma rutt och
+är ingen referens)".
+
+**Också struken: rundkontrollen** (upp − ner nära noll på pass som börjar
+och slutar på samma ställe). Med hysteres som räknar sista segmentet är upp
+− ner per konstruktion höjdskillnaden mellan start och mål, så kontrollen
+kan inte skilja metoder åt. Den mäter drift i höjdserien — och den är
+4,3–4,5 m i median.
+
+Det som återstår som kontroll är upprepningar av samma runda: en metod som
+räknar brus ger spridning mellan gångerna. Underlaget är i dag tunt (två
+rundor, nio pass) och växer med varje upprepning.
 
 **Kalibrering 2026-11-04** (62 FIT-pass med höjd och minst 20 m stigning):
 
@@ -194,19 +211,19 @@ Jämför passets härledda stigning mot `session.total_ascent`, som finns och
 först när vändningen överstiger tröskeln) provades med och utan 11 s
 utjämning, 1–5 m. Tre kontroller: fel mot Apple, |upp − ner| på rundor (42
 pass), spridning mellan upprepningar av samma runda (2 grupper, 9 pass —
-tunt underlag).
+tunt underlag). Fel mot Apple och rundkontrollen redovisas nedan men är
+strukna som kontrollpunkter, se ovan.
 
-- Upp − ner på rundor blev 4,3–4,5 m med utjämning oavsett metod. Det är
-  väntat: med hysteres som räknar sista segmentet är upp − ner per
-  konstruktion höjdskillnaden start–mål. Måttet mäter alltså drift i
-  höjdserien, inte summeringen — och driften är liten.
+- Upp − ner på rundor blev 4,3–4,5 m med utjämning oavsett metod, som
+  väntat när upp − ner per konstruktion är höjdskillnaden start–mål.
 - Hysteres 3 m räknar systematiskt lågt: löppass 0,80 av Apple i median
   (7,4 mot 9,7 m/km), spridning mellan upprepningar 29 % mot 17 %.
 - **Apple är inte stabilt på samma runda:** en 7,1 km-runda gav 10, 93 och
   26 m; en 9,3 km-runda 56–58 m tre gånger, sedan 78–85 m. Apple är därför
   ingen facit på flacka pass, vilket stöder variant (a).
-- **Valt: 11 s glidande medel, hysteres 0 m** (`hojd.py`). Bäst på alla tre
-  mått. Konstanterna `UTJAMNING_S` och `HYSTERES_M` på ett ställe.
+- **Valt: 11 s glidande medel, hysteres 0 m** (`hojd.py`). Minst spridning
+  mellan upprepningar (17 % mot 29 % för hysteres 3 m), och närmast Apple
+  även om det inte längre är ett krav. Konstanterna `UTJAMNING_S` och `HYSTERES_M` på ett ställe.
 
 **Byggt 2026-11-04:** `hojd.py` delas av parse_fit (record), parse_hae
 (route), weekly och notify. Migration 0004 lägger till `workout.ascent_m`,

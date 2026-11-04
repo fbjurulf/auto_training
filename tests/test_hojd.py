@@ -50,7 +50,9 @@ class KmTests(unittest.TestCase):
 class TextTests(unittest.TestCase):
     def test_apple_value_shown_only_when_25_percent_apart(self):
         self.assertEqual(hojd.text(120, 118, 100), "upp 120 m, ner 118 m")
-        self.assertEqual(hojd.text(102, 99, 31), "upp 102 m, ner 99 m (Apple: upp 31 m)")
+        self.assertEqual(hojd.text(102, 99, 31),
+                         "upp 102 m, ner 99 m (Apple anger 31 m — Apples värde varierar "
+                         "kraftigt på samma rutt och är ingen referens)")
         self.assertIsNone(hojd.text(None, None, 50))
 
 
