@@ -256,7 +256,7 @@ Kända dubbelberäkningar att åtgärda:
    sammanhängande sträcka (A6) och settabellen. Settid = varvtid minus stopp
    inne i setet; vändningar räknas som simning. Stopp inne i ett set märks
    "2:05*" med fotnot om avbrottet. Rubrikens simtid är summan av setens
-   tider, så rubrikens och setens tempo går ihop (10-21: 2:14/100 m, var
+   tider, så rubrikens och setens tempo går ihop (10-21: 2:12/100 m, var
    2:03 mot set på 2:15). Stopp avgörs vid tolkningen på FIT-längderna och
    sparas (`avbrott_s` på set, `stopp` på vilovarv) — räknat ur databasens
    sekundavrundade tider hade fotnoten och A6 kunnat säga olika saker om
@@ -270,7 +270,7 @@ Kända dubbelberäkningar att åtgärda:
    finns den bara i första setet: 15, 87, 29 och 29 s. Stopp på 10–11,9 s
    räknas som vändning; accepterat, gränsen bor på ett ställe.
    **Definitionsbyte:** rubrikens simtempo blir långsammare i alla simpass
-   (10-21: 2:03 → 2:11/100 m). Veckorapporten för v45 får en rad överst om
+   (10-21: 2:03 → 2:12/100 m). Veckorapporten för v45 får en rad överst om
    det (`weekly.DEFINITIONSBYTEN`).
 2. **Tempo per kilometer** — gjort: `passdata.tempo_per_km`.
 3. **Höjdmeter** — gjort i del B: `hojd.py`.

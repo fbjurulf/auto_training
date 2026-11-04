@@ -113,6 +113,17 @@ class ReportTests(unittest.TestCase):
         sektion = self._sektion("2026-10-07")
         self.assertIn("**Längsta utan stopp: 375 m** · **längsta med korta stopp: 1000 m**", sektion)
 
+    def test_v45_notice_states_the_pace_the_report_shows(self):
+        # Notisen hade ett hårdkodat tal som inte jämfördes mot något och blev
+        # fel på avrundningen (2:11 mot rapportens 2:12).
+        import re
+        import weekly
+        notis = next(t for d, t in weekly.DEFINITIONSBYTEN if "Simtempot" in t)
+        i_notis = re.search(r"som nu är (\d+:\d\d)", notis).group(1)
+        i_rapport = re.search(r"(\d+:\d\d)/100 m räknat på simtiden",
+                              self._sektion("2026-10-21")).group(1)
+        self.assertEqual(i_notis, i_rapport)
+
     def test_set_times_add_up_to_header_swim_time(self):
         # Rubrikens simtid och setens tid räknas likadant - tempot går ihop.
         for dag in ("2026-09-30", "2026-10-07", "2026-10-19"):

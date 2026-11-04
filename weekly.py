@@ -54,7 +54,7 @@ DEFINITIONSBYTEN = [
      "inräknade, och tid stillastående vid väggen före start räknas bort. Alla "
      "simpass är omräknade. Äldre rapporter visar ett snabbare tempo enligt den "
      "gamla definitionen - till exempel 2:03 per 100 m för 2026-10-21, som nu "
-     "är 2:11. Det är en ändrad beräkning, inte en förändring i simningen."),
+     "är 2:12. Det är en ändrad beräkning, inte en förändring i simningen."),
 ]
 
 # Gränser för vad som räknas som avvikande dygn.
