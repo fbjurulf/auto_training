@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 58 tester.
+  parsrarna. Sviten har 63 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -40,16 +40,13 @@ siffra som saknas.
   ursprung: HAE:s löpsplittar har
   `pace_s_per_km`, HAE:s simset `pace_s_per_100m` i `extra`, FIT-varv
   `lap_trigger` i `extra`. Stående test: `OriginTests` i `test_facit.py`.
-  **Kvar att göra:** A3 krävde också att ett pass med bara HAE-data märks
-  tydligt, visar bara det som går att lita på och utelämnar härledda
-  värden. Det byggdes inte — A3 blev bara företrädesregeln. I dag visar
-  rapporten HAE:s splittar och simset utan markering, utom en mening under
-  HAE-härledda simset. Gäller pass 94 (10-27).
-  **Samma flagga som F1:s larm:** passets FIT-status avgörs på ett ställe —
-  väntar på FIT (under 24 h), saknar FIT (larmar, 24 h–14 dygn), förlorat
-  för FIT (äldre). Rapporten visar passet som HAE-pass när statusen inte är
-  FIT, och särskilt när larmet tystnat. Annars accepterar systemet tyst ett
-  tillstånd som rapporten inte visar.
+  **FIT-status** (`fitstatus.py`, byggd 2026-11-04): väntar på FIT (under
+  24 h), saknar FIT (vakthunden larmar, 24 h–14 dygn), förlorad för FIT
+  (äldre). Vakthundens larm och rapportens märkning läser samma funktion, så
+  passet syns som HAE-pass även när larmet tystnat. **Kvar att göra:** A3
+  krävde också att HAE-pass bara visar det som går att lita på och
+  utelämnar härledda värden. Märkningen finns nu, men splittar och simset
+  visas fortfarande.
 - **A1.** Blockdetekteringen. Orsaken var inte en paus utan resume, utan
   att `session/stop_all` ignorerades så att sista blocket aldrig stängdes.
   `blockdata.py` delas av weekly och notify. Block utan innehåll slås ihop

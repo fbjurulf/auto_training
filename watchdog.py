@@ -13,6 +13,8 @@ from datetime import date, datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import fitstatus
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 LOG_PATH = os.environ.get(
@@ -22,11 +24,6 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 RAW_IMPORT_MAX_AGE = timedelta(days=3)
-# HealthFit laddar upp FIT-filen direkt efter passet. Saknas den efter ett
-# dygn har exporten fallit bort, och passet har bara HAE:s minutdata. Larmet
-# upprepas dagligen i två veckor, sedan anses passet förlorat för FIT.
-FIT_MISSING_AFTER = timedelta(hours=24)
-FIT_MISSING_WINDOW = timedelta(days=14)
 OVERLAP_SHARE = 0.5  # andel av det kortare passet
 HEALTH_DATA_MAX_AGE_DAYS = 2
 DROPBOX_PATH = "dropbox:Apps/HealthFitExporter"
@@ -91,13 +88,11 @@ def database_alerts(conn, now):
             )
 
     fmt = "%Y-%m-%dT%H:%M:%SZ"
-    missing = conn.execute(
-        """SELECT id, local_date, sport_name FROM v_workout
-           WHERE source_code = 'apple_health_hae' AND fit_enriched = 0
-             AND started_at <= ? AND started_at >= ?
-           ORDER BY started_at""",
-        ((now - FIT_MISSING_AFTER).strftime(fmt),
-         (now - FIT_MISSING_WINDOW).strftime(fmt))).fetchall()
+    missing = [m for m in conn.execute(
+        """SELECT id, local_date, sport_name, source_code, fit_enriched, started_at
+           FROM v_workout WHERE source_code = 'apple_health_hae' AND fit_enriched = 0
+           ORDER BY started_at""")
+        if fitstatus.fit_status(m[3], m[4], m[5], now) == fitstatus.SAKNAS]
     if missing:
         alerts.append(
             "Pass utan FIT-fil efter 24 h, bara HAE-data: "

@@ -25,6 +25,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import blockdata
+import fitstatus
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -415,7 +416,7 @@ def health_section(conn, start: date, end: date):
 
 # ---------- rapport ----------
 
-def build_report(conn, start: date, end: date) -> str:
+def build_report(conn, start: date, end: date, now=None) -> str:
     iso_year, iso_week, _ = start.isocalendar()
     prev_start, prev_end = start - timedelta(days=7), end - timedelta(days=7)
     base_start = start - timedelta(days=28)
@@ -523,6 +524,13 @@ def build_report(conn, start: date, end: date) -> str:
         if w["kcal_active"]:
             rad.append(f"{n(w['kcal_active'], 0)} kcal")
         L.append(", ".join(rad))
+        # Samma status som vakthundens larm - när larmet tystnar ska passet
+        # fortfarande synas som HAE-pass här.
+        markering = fitstatus.markering(
+            fitstatus.fit_status(w["source_code"], w["fit_enriched"], w["started_at"], now),
+            w["started_at"])
+        if markering:
+            L.append(markering)
 
         zoner = zones_for(conn, w["id"])
         if zoner:
