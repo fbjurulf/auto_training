@@ -116,12 +116,15 @@ def database_alerts(conn, now):
             + ", ".join(f"{o[2]} {o[3]} (pass {o[0]} och {o[1]})" for o in overlap) + ".")
 
     # Matchningar på starttid kan slå ihop två olika pass - de ska synas när
-    # de händer. Vakthunden körs dagligen, så ett dygn bakåt räcker.
+    # de händer. Villkoret är passets starttid, inte matchningsradens: en
+    # omtolkning av gamla filer registrerar matchningar på nytt, och då får
+    # gamla, redan godtagna pass inte larma igen. Vakthunden körs dagligen,
+    # så ett dygn bakåt räcker.
     by_time = conn.execute(
         """SELECT m.workout_id, w.local_date, w.sport_name, s.code
            FROM workout_match m JOIN v_workout w ON w.id = m.workout_id
            JOIN source s ON s.id = m.source_id
-           WHERE m.method = 'tid' AND m.matched_at > ? ORDER BY m.matched_at""",
+           WHERE m.method = 'tid' AND w.started_at > ? ORDER BY w.started_at""",
         ((now - timedelta(hours=24)).strftime(fmt),)).fetchall()
     if by_time:
         alerts.append(

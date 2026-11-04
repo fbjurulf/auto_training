@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 74 tester.
+  parsrarna. Sviten har 75 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -54,7 +54,9 @@ siffra som saknas.
 - **A8.** Dubbletter. `matchning.py` delas av parse_fit och parse_hae: UUID,
   annars samma sport och starttid inom fem minuter. Varje matchning mellan
   källor sparas i `workout_match` (migration 0003); vakthunden larmar på
-  tidsmatchningar det senaste dygnet och på pass av samma sport som
+  tidsmatchningar för pass som startat det senaste dygnet — passets
+  starttid, inte matchningsradens, så att en omtolkning av gamla filer inte
+  larmar för redan godtagna pass — och på pass av samma sport som
   överlappar mer än 50 %. Testat: en FIT-fil utan UUID följd av HAE gav två
   pass med den gamla regeln och ger ett nu.
 - **Drift.** `ingest_app.py` kör pipelinen under `flock`. 218 dubblettrader

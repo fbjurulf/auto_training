@@ -61,12 +61,20 @@ class UuidLessFitTests(unittest.TestCase):
                JOIN source s ON s.id = m.source_id""").fetchall()
         self.assertEqual([tuple(r) for r in rows], [("tid", "apple_health_hae")])
 
-    def test_watchdog_reports_time_match(self):
+    def test_watchdog_reports_time_match_for_new_workout(self):
         import watchdog
-        alerts = watchdog.database_alerts(self.conn, datetime.now(timezone.utc))
+        # Vakthunden kör morgonen efter passet (start 15:25:53Z).
+        alerts = watchdog.database_alerts(self.conn, datetime(2026, 10, 23, 8, tzinfo=timezone.utc))
         self.assertTrue(any(a.startswith("Matchat på starttid") and "2026-10-22" in a
                             for a in alerts), alerts)
         self.assertFalse(any(a.startswith("Möjliga dubbletter") for a in alerts), alerts)
+
+    def test_old_workout_does_not_alert_even_if_match_row_is_new(self):
+        # Som pass 13 efter omtolkningen 2026-11-04: matchningsraden är ny,
+        # passet är gammalt och redan godtaget.
+        import watchdog
+        alerts = watchdog.database_alerts(self.conn, datetime(2026, 11, 5, 8, tzinfo=timezone.utc))
+        self.assertFalse(any(a.startswith("Matchat på starttid") for a in alerts), alerts)
 
 
 if __name__ == "__main__":
