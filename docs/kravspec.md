@@ -34,10 +34,10 @@ siffra som saknas.
   migration i `sql/migrations/`.
 - **A3 + A3a.** FIT är sanningskälla. `workout.fit_enriched` styr att HAE
   bara fyller tomma fält och aldrig ersätter segment, simstatistik eller
-  löpdetaljer. Pass 83, 88 och 91 reparerade. **Ofullständigt:** under A2
-  hittades två pass till, 90 (10-20) och 93 (10-26), med HAE-splittar i
-  stället för FIT-varv. Kontrollen i A3 jämförde bara antal segment, och de
-  råkade stämma. Rätt kontroll är segmentens ursprung: HAE:s löpsplittar har
+  löpdetaljer. Pass 83, 88 och 91 reparerade, och 2026-11-04 även 90 (10-20)
+  och 93 (10-26), som hittades under A2. Kontrollen i A3 jämförde bara antal
+  segment, och för 90 och 93 råkade de stämma. Rätt kontroll är segmentens
+  ursprung: HAE:s löpsplittar har
   `pace_s_per_km`, HAE:s simset `pace_s_per_100m` i `extra`, FIT-varv
   `lap_trigger` i `extra`. Stående test: `OriginTests` i `test_facit.py`.
   **Kvar att göra:** A3 krävde också att ett pass med bara HAE-data märks
@@ -45,6 +45,11 @@ siffra som saknas.
   värden. Det byggdes inte — A3 blev bara företrädesregeln. I dag visar
   rapporten HAE:s splittar och simset utan markering, utom en mening under
   HAE-härledda simset. Gäller pass 94 (10-27).
+  **Samma flagga som F1:s larm:** passets FIT-status avgörs på ett ställe —
+  väntar på FIT (under 24 h), saknar FIT (larmar, 24 h–14 dygn), förlorat
+  för FIT (äldre). Rapporten visar passet som HAE-pass när statusen inte är
+  FIT, och särskilt när larmet tystnat. Annars accepterar systemet tyst ett
+  tillstånd som rapporten inte visar.
 - **A1.** Blockdetekteringen. Orsaken var inte en paus utan resume, utan
   att `session/stop_all` ignorerades så att sista blocket aldrig stängdes.
   `blockdata.py` delas av weekly och notify. Block utan innehåll slås ihop
@@ -104,16 +109,34 @@ I produktionen varnade regeln först för tre pass som den gamla släppte
 igenom. Två var svansar: 48 (07-30, FIT, sista 44 s) och 94 (10-27, bara
 HAE, sista 36 s) — de får fotnot. Det tredje, 93, var ett A3-offer.
 
-## A8. Dubbletten 2026-10-04
+## A8. Dubbletter — utredd 2026-11-04
 
-Facit säger att passet ska finnas en gång. Matchningen sker på
-HealthKit-UUID, annars starttid inom fem minuter och samma sport. Åtta
-FIT-filer saknar UUID och matchas på starttid.
+**10-04 är inte ett UUID-löst par.** FIT-filen har UUID (`E4F1DA28-…`) och
+hör inte till de åtta utan. Förloppet, ur loggarna:
 
-- Ta reda på vilken rad som kommer varifrån och om båda har UUID.
-- Åtgärda orsaken, inte raden.
-- Lägg en kontroll som flaggar pass av samma sport som överlappar mer än
-  50 % i tid.
+- 11:15Z: FIT skapar pass 75 med UUID:t som `external_id`.
+- 15:12Z: HAE-payload 210, som bara innehöll samma pass, ger "1 nya" i
+  parse_hae — en HAE-rad med samma UUID. Den dåvarande parse_hae saknade
+  spärren mot FIT-pass med samma `external_id`; dagens kod har den.
+- Raden finns inte i dag, inte heller i backupen från 11-03 före
+  ombyggnaden. Paret delade `external_id`, så det är precis den sort
+  `fix_dubbletter.sql` raderade.
+
+Facit (ett pass 10-04) är uppfyllt i fixturerna och i produktionen. Ingen
+överlappning av samma sport finns bland de 102 passen i vyn.
+
+**Hålet som finns kvar:** en FIT-fil utan UUID får `digest[:32]` som
+`external_id`. Kommer HAE efter FIT skapas en dubblett som varken parse_hae:s
+spärr (jämför `external_id`) eller `fix_dubbletter.sql` (raderar bara par med
+samma `external_id`; steg 3 listade starttidspar men raderade inget) fångar.
+Kommer FIT efter HAE matchar parse_fit på starttid, och då uppstår ingen.
+Senaste UUID-lösa filen är från 09-20.
+
+- **Orsaken:** parse_hae ska matcha mot befintliga pass på samma sätt som
+  parse_fit gör — UUID, annars samma sport och starttid inom fem minuter.
+- **Kontrollen:** pass av samma sport som överlappar mer än 50 % i tid är
+  den enda mekanism som hittar ett par utan gemensamt `external_id`. Den
+  ska vara stående (vakthunden), inte en engångsstädning.
 
 ---
 
