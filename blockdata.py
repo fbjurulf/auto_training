@@ -67,6 +67,26 @@ def varv_referens(summa_s, aktiv_s, forfluten_s):
     return referens, varna
 
 
+def varv_kontroll(varv, aktiv_s, forfluten_s, ended_at):
+    """
+    Ger (referens, varna, svans_s). Varvens siffror kan vara rätt men inte
+    täcka hela passet: går hela differensen att lägga i en svans efter sista
+    varvet blir det en fotnot (svans_s), inte en varning. Finns luckor inne
+    i passet, eller går differensen inte att placera, varnar kontrollen.
+    """
+    summa = sum(v["duration_s"] or 0 for v in varv)
+    referens, varna = varv_referens(summa, aktiv_s, forfluten_s)
+    if not varna or not varv or not ended_at or not varv[-1]["started_at"]:
+        return referens, varna, 0
+    sista = varv[-1]
+    svans = (_tid(ended_at) - _tid(sista["started_at"])).total_seconds() \
+        - (sista["duration_s"] or 0)
+    if svans <= 0:
+        return referens, varna, 0
+    referens, varna = varv_referens(summa + svans, aktiv_s, forfluten_s)
+    return (referens, False, svans) if not varna else (referens, True, 0)
+
+
 def _tomt(b):
     return (b["distance_m"] or 0) < TOMT_M or (b["duration_s"] or 0) < TOMT_S
 

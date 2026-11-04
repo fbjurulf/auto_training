@@ -98,6 +98,29 @@ class LapReferenceTests(unittest.TestCase):
         self.assertEqual(blockdata.varv_referens(625, 600, 660), ("aktiv", True))
 
 
+class LapTailTests(unittest.TestCase):
+    def _varv(self, *spann):
+        return [{"started_at": _t(fran).strftime("%Y-%m-%dT%H:%M:%SZ"), "duration_s": tid}
+                for fran, tid in spann]
+
+    def test_tail_after_last_lap_is_footnote(self):
+        # Som pass 94: varven tar slut 36 s före passet, inga luckor emellan.
+        varv = self._varv((0, 1000), (1000, 1000), (2000, 564))
+        ended = _t(2600).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertEqual(blockdata.varv_kontroll(varv, 2600, 2600, ended), ("aktiv", False, 36))
+
+    def test_gap_inside_workout_warns(self):
+        # Samma 36 s fattas, men mitt i passet - varvens siffror går inte att lita på.
+        varv = self._varv((0, 1000), (1036, 1000), (2036, 564))
+        ended = _t(2600).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertEqual(blockdata.varv_kontroll(varv, 2600, 2600, ended), ("aktiv", True, 0))
+
+    def test_complete_laps_have_no_tail_note(self):
+        varv = self._varv((0, 1300), (1300, 1298))
+        ended = _t(2600).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertEqual(blockdata.varv_kontroll(varv, 2600, 2600, ended), ("aktiv", False, 0))
+
+
 def _b(duration_s, distance_m, hr=140):
     return {"duration_s": duration_s, "distance_m": distance_m, "hr_avg": hr, "hr_max": hr}
 

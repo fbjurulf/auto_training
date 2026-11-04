@@ -626,8 +626,12 @@ def build_report(conn, start: date, end: date) -> str:
                 # varvtyp (A2a). Referensen väljs ur summan och skrivs ut.
                 paus_s = (w["elapsed_s"] or 0) - (w["duration_s"] or 0)
                 summa = sum(s["duration_s"] or 0 for s in varv)
-                referens, varna = blockdata.varv_referens(
-                    summa, w["duration_s"], w["elapsed_s"])
+                referens, varna, svans = blockdata.varv_kontroll(
+                    varv, w["duration_s"], w["elapsed_s"], w["ended_at"])
+                if svans:
+                    L.append("")
+                    L.append(f"Varven täcker inte passets sista "
+                             f"{f'{round(svans)} s' if svans < 60 else hms(svans)}.")
                 if paus_s > 5:
                     L.append("")
                     L.append(f"Passet pausades {hms(paus_s)} totalt. " + (

@@ -164,6 +164,29 @@ class RunTests(unittest.TestCase):
         self.assertEqual(rows[0]["duration_s"], f["duration_s"])
 
 
+# HAE:s segment känns igen på innehållet: löpsplittar har pace_s_per_km,
+# simset har pace_s_per_100m i extra. FIT skriver aldrig någotdera.
+HAE_ORIGIN = "(pace_s_per_km IS NOT NULL OR extra LIKE '%pace_s_per_100m%')"
+
+
+class OriginTests(unittest.TestCase):
+    def test_fit_enriched_workouts_have_no_hae_segments(self):
+        # A3: kontrollen jämförde först antal segment, och missade pass 90 och
+        # 93 där HAE och FIT råkade ge lika många. Ursprunget är det som räknas.
+        rows = conn.execute(
+            f"""SELECT w.local_date, w.sport_code, COUNT(g.id) n FROM v_workout w
+                JOIN workout_segment g ON g.workout_id = w.id AND {HAE_ORIGIN}
+                WHERE w.fit_enriched = 1 GROUP BY w.id""").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [])
+
+    def test_fit_enriched_workouts_have_fit_laps(self):
+        rows = conn.execute(
+            """SELECT w.local_date, w.sport_code FROM v_workout w WHERE w.fit_enriched = 1
+               AND NOT EXISTS (SELECT 1 FROM workout_segment g WHERE g.workout_id = w.id
+                               AND g.extra LIKE '%lap_trigger%')""").fetchall()
+        self.assertEqual([tuple(r) for r in rows], [])
+
+
 class WeekTests(unittest.TestCase):
     def test_week_42_excluded_time(self):
         f = FACIT["week_42"]

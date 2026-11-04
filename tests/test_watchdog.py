@@ -70,6 +70,39 @@ class WatchdogTests(unittest.TestCase):
         self.assertIn("hoppade över 2 filer", alerts[-1])
 
 
+class FitMissingTests(unittest.TestCase):
+    def setUp(self):
+        self.conn = build_db()
+        _raw_import(self.conn, "2026-11-04T07:00:00Z")
+        _daily_metric(self.conn, "2026-11-04")
+        self.now = datetime(2026, 11, 4, 8, tzinfo=timezone.utc)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def _workout(self, external_id, started_at, source="apple_health_hae", fit_enriched=0):
+        self.conn.execute(
+            """INSERT INTO workout (source_id, external_id, sport_id, started_at, ended_at,
+                 local_date, duration_s, fit_enriched)
+               VALUES (?, ?, (SELECT id FROM sport WHERE code='run'), ?, ?, ?, 2600, ?)""",
+            (_source_id(self.conn, source), external_id, started_at, started_at,
+             started_at[:10], fit_enriched))
+
+    def test_hae_only_workout_older_than_24_h_alerts(self):
+        # Pass 94: 2026-10-27, HealthFit exporterade aldrig FIT-filen.
+        self._workout("94", "2026-10-27T17:13:16Z")
+        alerts = watchdog.database_alerts(self.conn, self.now)
+        self.assertEqual(alerts, ["Pass utan FIT-fil efter 24 h, bara HAE-data: "
+                                  "2026-10-27 Löpning (pass 1)."])
+
+    def test_recent_or_enriched_or_old_workouts_do_not_alert(self):
+        self._workout("ny", "2026-11-03T12:00:00Z")
+        self._workout("berikad", "2026-10-30T12:00:00Z", fit_enriched=1)
+        self._workout("fit", "2026-10-30T13:00:00Z", source="healthfit_fit", fit_enriched=1)
+        self._workout("gammal", "2026-10-20T07:59:59Z")
+        self.assertEqual(watchdog.database_alerts(self.conn, self.now), [])
+
+
 def _source_id(conn, code):
     return conn.execute("SELECT id FROM source WHERE code = ?", (code,)).fetchone()[0]
 

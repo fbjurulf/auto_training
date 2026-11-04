@@ -35,6 +35,13 @@ def _fit_top_segments(fit_name):
     return len(m.get("lap", [])) + len(blocks)
 
 
+def _hae_segments(workout_id):
+    from tests.test_facit import HAE_ORIGIN
+    return conn.execute(
+        f"SELECT count(*) FROM workout_segment WHERE workout_id=? AND {HAE_ORIGIN}",
+        (workout_id,)).fetchone()[0]
+
+
 def _top_segment_count(workout_id):
     return conn.execute(
         "SELECT count(*) FROM workout_segment WHERE workout_id=? AND parent_id IS NULL",
@@ -63,11 +70,14 @@ class RepairTests(unittest.TestCase):
                 expected = _fit_top_segments(fit_name)
                 self.assertNotEqual(_top_segment_count(wid), expected,
                                     "skadan gick inte att återskapa")
+                self.assertGreater(_hae_segments(wid), 0,
+                                   "ursprungskontrollen känner inte igen HAE:s segment")
 
                 shutil.copy(DATA_DIR / "fit" / fit_name, tmp / "fit" / fit_name)
                 raw_rows = conn.execute("SELECT count(*) FROM raw_import").fetchone()[0]
                 parse_fit.main([tmp / "fit" / fit_name])
                 self.assertEqual(_top_segment_count(wid), expected)
+                self.assertEqual(_hae_segments(wid), 0)
                 self.assertEqual(conn.execute("SELECT count(*) FROM raw_import").fetchone()[0],
                                  raw_rows, "omtolkningen lade en dubblett i raw_import")
 

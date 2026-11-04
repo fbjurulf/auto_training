@@ -23,9 +23,12 @@ siffra som saknas.
 
 - **F1 vakthund.** Larmar vid utebliven import, utebliven hälsodata,
   rclone-fel, nere tjänster och hoppade FIT-filer. Bevisad i produktion.
+  Sedan 2026-11-04 också pass som saknar FIT-fil efter 24 h (bara
+  HAE-data), larmat dagligen i 14 dagar. A3 krävde det, men det saknades:
+  pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 46 tester.
+  parsrarna. Sviten har 53 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -34,8 +37,14 @@ siffra som saknas.
   löpdetaljer. Pass 83, 88 och 91 reparerade. **Ofullständigt:** under A2
   hittades två pass till, 90 (10-20) och 93 (10-26), med HAE-splittar i
   stället för FIT-varv. Kontrollen i A3 jämförde bara antal segment, och de
-  råkade stämma. Rätt kontroll är segmentens ursprung: HAE-segment har
-  `pace_s_per_km`, FIT-varv har `lap_trigger` i `extra`.
+  råkade stämma. Rätt kontroll är segmentens ursprung: HAE:s löpsplittar har
+  `pace_s_per_km`, HAE:s simset `pace_s_per_100m` i `extra`, FIT-varv
+  `lap_trigger` i `extra`. Stående test: `OriginTests` i `test_facit.py`.
+  **Kvar att göra:** A3 krävde också att ett pass med bara HAE-data märks
+  tydligt, visar bara det som går att lita på och utelämnar härledda
+  värden. Det byggdes inte — A3 blev bara företrädesregeln. I dag visar
+  rapporten HAE:s splittar och simset utan markering, utom en mening under
+  HAE-härledda simset. Gäller pass 94 (10-27).
 - **A1.** Blockdetekteringen. Orsaken var inte en paus utan resume, utan
   att `session/stop_all` ignorerades så att sista blocket aldrig stängdes.
   `blockdata.py` delas av weekly och notify. Block utan innehåll slås ihop
@@ -84,11 +93,16 @@ Regel (`blockdata.varv_referens`):
   mer än 2 % från både aktiv och förfluten tid. Kontrollen får inte tystna
   bara för att en referens alltid väljs.
 - Rapporten skriver passets paustid och vilken referens varven räknas på.
+- **Svans är en fotnot, inte en varning** (`blockdata.varv_kontroll`). Går
+  hela differensen att lägga efter sista varvet, utan luckor inne i passet,
+  står "Varven täcker inte passets sista 44 s." under tabellen. Varvens
+  siffror är då rätt, de täcker bara inte hela passet. Luckor inne i passet,
+  eller en differens som inte går att placera, ger varning som förut — så
+  behåller varningen betydelsen "siffrorna kan vara fel".
 
-I produktionen varnar regeln för tre pass som den gamla släppte igenom. Två
-har en svans utan varv: 48 (07-30, FIT, sista 44 s utanför varven) och 94
-(10-27, bara HAE, sista 36 s). Det tredje, 93, är ett A3-offer och ska
-repareras.
+I produktionen varnade regeln först för tre pass som den gamla släppte
+igenom. Två var svansar: 48 (07-30, FIT, sista 44 s) och 94 (10-27, bara
+HAE, sista 36 s) — de får fotnot. Det tredje, 93, var ett A3-offer.
 
 ## A8. Dubbletten 2026-10-04
 

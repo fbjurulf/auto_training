@@ -22,6 +22,11 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 RAW_IMPORT_MAX_AGE = timedelta(days=3)
+# HealthFit laddar upp FIT-filen direkt efter passet. Saknas den efter ett
+# dygn har exporten fallit bort, och passet har bara HAE:s minutdata. Larmet
+# upprepas dagligen i två veckor, sedan anses passet förlorat för FIT.
+FIT_MISSING_AFTER = timedelta(hours=24)
+FIT_MISSING_WINDOW = timedelta(days=14)
 HEALTH_DATA_MAX_AGE_DAYS = 2
 DROPBOX_PATH = "dropbox:Apps/HealthFitExporter"
 SERVICES = ("traning-ingest", "traning-bot")
@@ -83,6 +88,19 @@ def database_alerts(conn, now):
                 f"FIT-import {latest_fit_run[0]} hoppade över "
                 f"{skipped_count} filer; se parse_fit-loggen."
             )
+
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    missing = conn.execute(
+        """SELECT id, local_date, sport_name FROM v_workout
+           WHERE source_code = 'apple_health_hae' AND fit_enriched = 0
+             AND started_at <= ? AND started_at >= ?
+           ORDER BY started_at""",
+        ((now - FIT_MISSING_AFTER).strftime(fmt),
+         (now - FIT_MISSING_WINDOW).strftime(fmt))).fetchall()
+    if missing:
+        alerts.append(
+            "Pass utan FIT-fil efter 24 h, bara HAE-data: "
+            + ", ".join(f"{m[1]} {m[2]} (pass {m[0]})" for m in missing) + ".")
     return alerts
 
 
