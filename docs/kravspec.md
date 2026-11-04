@@ -171,6 +171,23 @@ för båda källorna, enligt del D.
 Jämför passets härledda stigning mot `session.total_ascent`, som finns och
 är Apples eget värde. Avviker de mycket är tröskeln fel satt.
 
+**Kalibrering 2026-11-04** (62 FIT-pass med höjd och minst 20 m stigning):
+
+- **Samma höjdserie i båda källorna.** FIT `record.enhanced_altitude` och
+  HAE `route[].altitude` är båda 1 Hz och ger samma härledda stigning inom
+  ett par meter för samma pass. HAE:s `elevationUp` är Apples värde, samma
+  som FIT-sessionens `total_ascent`.
+- **Serien är redan utjämnad — "några meter" är för mycket.** Vid 5 m blir
+  medianen 45 % av Apples värde; redan vid 2 m räknas vandringarna i v42
+  för lågt (536 mot 651 m).
+- **Ingen inställning träffar alla pass.** Bäst: glidande medel 11 s, ingen
+  tröskel — median 14 % fel, 34 av 62 inom ±15 %, vandringarna 0,94–1,15.
+  Kvar finns flacka löppass där härlett blir 1,4–3,5 gånger Apples värde
+  (2026-03-21: 102 mot 31 m). Där dominerar bruset, och ingen tröskel som
+  inte samtidigt kapar riktiga backar tar bort det.
+- v42:s tre vandringar ger 2 280 m nedför med 0 m tröskel — specens
+  "cirka 2 500 m" var en uppskattning.
+
 Nedförsmeter är det viktiga för benen: tre dagars vandring med cirka
 2 500 m nedför gav tydliga spår i återhämtningsdatan.
 
