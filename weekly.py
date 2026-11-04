@@ -622,27 +622,24 @@ def build_report(conn, start: date, end: date) -> str:
                              f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
                              f"| {s['hr_max'] or '-'} |")
 
-                # Varven mäter aktiv tid, inte väggklocka. Jämförelsen ska
-                # därför gå mot duration_s - annars varnar kontrollen för
-                # korrekt data så fort passet haft en paus.
+                # Varvens tid går mot aktiv eller förfluten tid beroende på
+                # varvtyp (A2a). Referensen väljs ur summan och skrivs ut.
                 paus_s = (w["elapsed_s"] or 0) - (w["duration_s"] or 0)
-                if auto and paus_s > 60:
-                    L.append("")
-                    L.append(f"Passet pausades {hms(paus_s)} totalt. Kilometer"
-                             f"markeringarna sätts på tillryggalagd sträcka medan "
-                             f"klockan mäter tid bara när den går, så sträcka som "
-                             f"hinner tillgodoräknas under en paus hamnar i nästa "
-                             f"aktiva kilometer. Tempot per kilometer är därför "
-                             f"inte tillförlitligt för det här passet - läs "
-                             f"blocktabellen i stället.")
-
                 summa = sum(s["duration_s"] or 0 for s in varv)
-                ref = w["duration_s"]
-                if ref and abs(summa - ref) > ref * 0.02:
+                referens, varna = blockdata.varv_referens(
+                    summa, w["duration_s"], w["elapsed_s"])
+                if paus_s > 5:
+                    L.append("")
+                    L.append(f"Passet pausades {hms(paus_s)} totalt. " + (
+                        "Varven räknas på aktiv tid - pauserna ligger utanför varven."
+                        if referens == "aktiv" else
+                        "Varven räknas på förfluten tid - pauserna ingår i varven."))
+                if w["duration_s"] and varna:
                     L.append("")
                     L.append(f"Obs: varven summerar till {hms(summa)} mot passets "
-                             f"aktiva tid {hms(ref)}. Avvikelsen är inte förklarad "
-                             f"av paus och bör kontrolleras.")
+                             f"aktiva tid {hms(w['duration_s'])} och förflutna tid "
+                             f"{hms(w['elapsed_s'])}. Avvikelsen förklaras inte av "
+                             f"pausen och bör kontrolleras.")
 
                 # Handledsmätare spikar ofta de första minuterna innan de
                 # låser på. Syns passets maxpuls bara i första segmentet,

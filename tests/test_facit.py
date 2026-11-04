@@ -8,7 +8,7 @@ import json
 import re
 import shutil
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 from tests.replay import DATA_DIR, replay
 
@@ -46,6 +46,17 @@ def _top_segments(workout_id):
     return conn.execute(
         """SELECT * FROM workout_segment WHERE workout_id = ? AND parent_id IS NULL
            ORDER BY seq""", (workout_id,)).fetchall()
+
+
+def _report_section(local_date, sport_name):
+    import weekly
+    d = date.fromisoformat(local_date)
+    monday = d - timedelta(days=d.weekday())
+    lines = weekly.build_report(conn, monday, monday + timedelta(days=6)).splitlines()
+    start = next(i for i, l in enumerate(lines)
+                 if l.startswith("### ") and local_date in l and sport_name in l)
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("#")), len(lines))
+    return "\n".join(lines[start:end])
 
 
 def _has_column(table, column):
@@ -132,7 +143,17 @@ class RunTests(unittest.TestCase):
         self.assertEqual(w["elapsed_s"] - w["duration_s"], f["pause_s"])
 
     def test_2026_10_18_no_integrity_warning(self):
-        self.skipTest("Integritetsvarningen finns inte i koden än")
+        f = FACIT["run_2026_10_18"]
+        section = _report_section(f["local_date"], "Löpning")
+        self.assertEqual("Obs: varven summerar" in section, f["integrity_warning"], section)
+        # A2a: distansvarv summerar till aktiv tid.
+        self.assertIn("Varven räknas på aktiv tid", section)
+
+    def test_2026_10_22_laps_counted_on_elapsed_time(self):
+        # A2a-fynd, inte Träningsappen: egna varvtryck spänner över pauserna.
+        section = _report_section(FACIT["run_2026_10_22"]["local_date"], "Löpning")
+        self.assertIn("Varven räknas på förfluten tid", section)
+        self.assertNotIn("Obs: varven summerar", section)
 
     def test_2026_10_04_single_workout(self):
         f = FACIT["run_2026_10_04"]

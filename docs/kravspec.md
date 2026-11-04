@@ -10,6 +10,10 @@ under "Gjort" så att det inte planeras om.
 kommandon innan du kör dem mot Pi:n och faktisk utskrift efteråt — aldrig
 en beskrivning av vad du tror hände.
 
+**Specen följer verkligheten:** när en utredning motsäger specen rättas
+specen i samma commit som fynden, så att nästa session läser rätt
+premisser.
+
 **Grundregel:** en siffra som ser rimlig ut men är fel är värre än en
 siffra som saknas.
 
@@ -21,13 +25,17 @@ siffra som saknas.
   rclone-fel, nere tjänster och hoppade FIT-filer. Bevisad i produktion.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 40 tester.
+  parsrarna. Sviten har 46 tester.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
 - **A3 + A3a.** FIT är sanningskälla. `workout.fit_enriched` styr att HAE
   bara fyller tomma fält och aldrig ersätter segment, simstatistik eller
-  löpdetaljer. Pass 83, 88 och 91 reparerade.
+  löpdetaljer. Pass 83, 88 och 91 reparerade. **Ofullständigt:** under A2
+  hittades två pass till, 90 (10-20) och 93 (10-26), med HAE-splittar i
+  stället för FIT-varv. Kontrollen i A3 jämförde bara antal segment, och de
+  råkade stämma. Rätt kontroll är segmentens ursprung: HAE-segment har
+  `pace_s_per_km`, FIT-varv har `lap_trigger` i `extra`.
 - **A1.** Blockdetekteringen. Orsaken var inte en paus utan resume, utan
   att `session/stop_all` ignorerades så att sista blocket aldrig stängdes.
   `blockdata.py` delas av weekly och notify. Block utan innehåll slås ihop
@@ -38,36 +46,49 @@ siffra som saknas.
 
 ---
 
-## A2a. Skilj autopaus från manuell paus — utredning
+## A2a. Autopaus mot manuell paus — utredd 2026-11-04
 
-Utredning, inte implementation. Rapportera fynden och vänta.
+Specens premiss var att manuell paus låter sträckan räknas vidare så att
+varven spänner över pausen, medan autopaus stoppar både tid och sträcka.
+Filerna (alla 102) visar något annat:
 
-Vid manuell paus fortsätter sträckan räknas mot samma kilometer, så varven
-spänner över pausen. Vid autopaus stannar både tid och sträcka, och varven
-gör det inte. Generaliseras A2 till alla pass med paus jämförs autopausade
-pass mot fel referens.
+- **HealthFit märker varje paus som manual.** Autopaus går inte att skilja i
+  filerna: 228 `timer/start/manual`, 126 `timer/stop_all/manual`, 102
+  `session/stop_all`, inget annat. Inget fält i någon meddelandetyp har
+  "auto" eller "pause" i namnet.
+- **Sträckan fortsätter inte under pauser:** högst 4,9 m per paus över 110
+  pauser, 19 m totalt.
+- **Det som skiljer är varvets tid, styrd av `lap_trigger`:** distansvarv
+  summerar till aktiv tid (36 pass), egna varvtryck till förfluten tid
+  (4 pass: 07-21, 09-20, 10-11, 10-22). Ingen blandning.
+- **Kriteriet "distanssumman inom 2 %" diskriminerar inte** — det är alltid
+  sant, i de flesta pass på metern.
 
-- Läs ut alla `event` / `event_type`-par ur samtliga FIT-filer. Förekommer
-  `timer/stop` utan `_all`, eller någon annan typ, som kan skilja autopaus
-  från manuell paus?
-- Går de inte att skilja: välj referens utifrån om varvens distanssumma
-  matchar totaldistansen inom 2 %. Gör den det har varven inte spänt över
-  pausen.
-- Skriv ut i rapporten vilken referens som använts.
-
-Notera att A1 visade att hypotesen i förra specen var fel. Utgå från
-filerna, inte från vad som verkar rimligt.
+Rapporttexten om att kilometertempot är otillförlitligt efter paus ("sträcka
+som tillgodoräknas under en paus hamnar i nästa kilometer") beskrev en
+antagen mekanism, inte en mätning. Borttagen i A2.
 
 ## A2. Pass med paus hanteras olika
 
-Löpning 2026-10-18 (10:28 paus) mot 2026-10-14: 14/10 fick blocktabell och
-korrekt förklaring. 18/10 fick ingen blocktabell, och integritetskontrollen
-skrev att varven summerade till 1:16:15 mot aktiv tid 1:06:05 och att
-skillnaden "inte är förklarad av paus". Skillnaden _är_ pausen.
+Ursprungligt symptom: 10-18 fick "varven summerar till 1:16:15 mot aktiv tid
+1:06:05 … inte förklarad av paus". Det kom från HAE:s splittar på pass 88 och
+försvann när A3a gav passet FIT:s varv. Logiken var ändå fel: kontrollen
+jämförde alltid mot aktiv tid, så egna varvtryck med lång paus gav falsk
+varning.
 
-Samma regel för alla pass med registrerad paus, enligt vad A2a visar.
-Integritetsvarningen slår bara till om avvikelsen inte förklaras av paus
-inom ±30 s.
+Regel (`blockdata.varv_referens`):
+
+- Referensen är den tid — aktiv eller förfluten — som varvens tidssumma
+  ligger närmast. Den väljs ur datan, inte ur typen av paus.
+- Varning om summan ligger mer än 30 s från den närmaste referensen, eller
+  mer än 2 % från både aktiv och förfluten tid. Kontrollen får inte tystna
+  bara för att en referens alltid väljs.
+- Rapporten skriver passets paustid och vilken referens varven räknas på.
+
+I produktionen varnar regeln för tre pass som den gamla släppte igenom. Två
+har en svans utan varv: 48 (07-30, FIT, sista 44 s utanför varven) och 94
+(10-27, bara HAE, sista 36 s). Det tredje, 93, är ett A3-offer och ska
+repareras.
 
 ## A8. Dubbletten 2026-10-04
 
@@ -310,7 +331,7 @@ höjdfunktionen är ett av D:s fall. D före C eftersom C annars skrivs två
 gånger. F3 sist av det tekniska, eftersom B måste ha sparat höjdmetrarna
 först.
 
-Testerna körs efter varje del. Sviten har i dag ett rött test (A4) och tre
-överhoppade (A6 ×2, A2:s integritetsvarning). De blir gröna av att felen
+Testerna körs efter varje del. Sviten har i dag ett rött test (A4) och två
+överhoppade (A6 ×2). De blir gröna av att felen
 åtgärdas, inte av att testen justeras — om ett förväntat värde inte stämmer
 med databasen, säg till i stället för att anpassa testet.

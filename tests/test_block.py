@@ -77,6 +77,27 @@ class ReliabilityTests(unittest.TestCase):
         self.assertFalse(blockdata.palitliga(block, 6000, 1800))
 
 
+class LapReferenceTests(unittest.TestCase):
+    def test_distance_laps_use_active_time(self):
+        # 2026-10-18: varvsumma 3960, aktiv 3965, förfluten 4593.
+        self.assertEqual(blockdata.varv_referens(3960, 3965, 4593), ("aktiv", False))
+
+    def test_manual_laps_use_elapsed_time(self):
+        # 2026-10-22: varvsumma 4617, aktiv 4567, förfluten 4617.
+        self.assertEqual(blockdata.varv_referens(4617, 4567, 4617), ("forfluten", False))
+
+    def test_more_than_30_s_from_nearest_reference_warns(self):
+        self.assertEqual(blockdata.varv_referens(4000, 3965, 4593), ("aktiv", True))
+
+    def test_far_from_both_references_warns(self):
+        # Närmast förfluten, men långt från båda - kontrollen får inte tystna.
+        self.assertEqual(blockdata.varv_referens(5200, 3965, 4593), ("forfluten", True))
+
+    def test_within_30_s_but_more_than_2_percent_from_both_warns(self):
+        # Kort pass: 25 s från aktiv tid är under 30 s men över 2 % av båda.
+        self.assertEqual(blockdata.varv_referens(625, 600, 660), ("aktiv", True))
+
+
 def _b(duration_s, distance_m, hr=140):
     return {"duration_s": duration_s, "distance_m": distance_m, "hr_avg": hr, "hr_max": hr}
 

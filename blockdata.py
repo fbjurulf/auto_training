@@ -44,6 +44,29 @@ def palitliga(block, distance_m, elapsed_s):
     return abs((sist - forst).total_seconds() - elapsed_s) <= elapsed_s * TOLERANS
 
 
+# A2: varvens tid summerar antingen till aktiv tid (klockans distansvarv -
+# pauserna ligger utanför varven) eller till förfluten tid (egna varvtryck
+# spänner över pauserna). Vilket avgörs ur summan, inte ur typen av paus:
+# HealthFit märker varje paus som manual.
+VARV_MARGINAL_S = 30
+
+
+def varv_referens(summa_s, aktiv_s, forfluten_s):
+    """
+    Ger (referens, varna): 'aktiv' eller 'forfluten' efter vilken tid
+    varven ligger närmast, och True om summan inte går ihop med passet -
+    mer än 30 s från den närmaste, eller mer än 2 % från båda.
+    """
+    aktiv_s = aktiv_s or 0
+    forfluten_s = forfluten_s or aktiv_s
+    mot_aktiv = abs(summa_s - aktiv_s)
+    mot_forfluten = abs(summa_s - forfluten_s)
+    referens = "aktiv" if mot_aktiv <= mot_forfluten else "forfluten"
+    varna = (min(mot_aktiv, mot_forfluten) > VARV_MARGINAL_S
+             or (mot_aktiv > aktiv_s * TOLERANS and mot_forfluten > forfluten_s * TOLERANS))
+    return referens, varna
+
+
 def _tomt(b):
     return (b["distance_m"] or 0) < TOMT_M or (b["duration_s"] or 0) < TOMT_S
 
