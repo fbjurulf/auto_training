@@ -15,11 +15,13 @@ Allt sker på en rad - inga följdfrågor. Ordningen spelar ingen roll:
     /senaste
     /veckorapport
     /veckorapport 44
+    /pass 58
 
 Körs som systemd-tjänst med long polling. Fail-closed: bara chat-id:t i
 .env släpps in.
 """
 
+import html
 import json
 import logging
 import os
@@ -36,6 +38,7 @@ from datetime import date, datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import passvisning
 import weekly
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,6 +49,7 @@ TOKEN = os.environ.get("TRANING_BOT_TOKEN") or os.environ.get("TELEGRAM_TOKEN", 
 CHAT_ID = str(os.environ.get("TELEGRAM_CHAT_ID", "")).strip()
 
 POLL_TIMEOUT = 30
+TELEGRAM_MAX = 4096
 LOKAL_TZ = datetime.now().astimezone().tzinfo
 
 Path(LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -245,6 +249,13 @@ def db():
     return conn
 
 
+def db_lasning():
+    """Skrivskyddad anslutning för kommandon som bara läser."""
+    conn = sqlite3.connect(f"{Path(DB_PATH).resolve().as_uri()}?mode=ro", uri=True, timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def senaste_pass(conn, antal=8):
     return conn.execute(
         """SELECT w.id, w.local_date, w.started_at, w.duration_s, w.distance_m,
@@ -331,7 +342,10 @@ rapporter eller statistik.
 
 <b>/veckorapport</b> - veckan hittills, som fil
 <code>/veckorapport 44</code> ger vecka 44 i sin helhet. Rapporten säger överst
-om veckan är ofullständig. Söndagens rapport påverkas inte."""
+om veckan är ofullständig. Söndagens rapport påverkas inte.
+
+<b>/pass</b> - allt som finns lagrat om ett pass, också dolda
+<code>/pass 58</code> Blir det för långt kommer det som fil."""
 
 
 def cmd_logga(conn, arg):
@@ -543,8 +557,7 @@ def cmd_veckorapport(arg):
     if isinstance(vecka, str):
         return vecka
     start, end = vecka
-    conn = sqlite3.connect(f"{Path(DB_PATH).resolve().as_uri()}?mode=ro", uri=True, timeout=30)
-    conn.row_factory = sqlite3.Row
+    conn = db_lasning()
     try:
         rapport = weekly.build_report(conn, start, end, slut=nu)
     finally:
@@ -552,6 +565,29 @@ def cmd_veckorapport(arg):
     filnamn, rubrik = weekly.rapportfil(start, end, nu)
     weekly.telegram("sendDocument", {"chat_id": CHAT_ID, "caption": rubrik},
                     {"document": (filnamn, rapport.encode("utf-8"))}, token=TOKEN)
+    return None
+
+
+def cmd_pass(arg):
+    """Allt som finns lagrat om passet, som meddelande eller som fil om det är för långt."""
+    m = re.fullmatch(r"\s*(\d+)\s*", arg or "")
+    if not m:
+        return ("Skriv passets id, till exempel <code>/pass 58</code>. "
+                "<code>/senaste</code> visar id:na.")
+    wid = int(m.group(1))
+    conn = db_lasning()
+    try:
+        text = passvisning.rendera(conn, wid)
+    finally:
+        conn.close()
+    if text is None:
+        return f"Hittar inget pass med id {wid}."
+    # Gränsen gäller det som skickas, alltså den escapade texten med taggarna.
+    meddelande = f"<pre>{html.escape(text, quote=False)}</pre>"
+    if len(meddelande) <= TELEGRAM_MAX:
+        return meddelande
+    weekly.telegram("sendDocument", {"chat_id": CHAT_ID, "caption": f"Pass {wid}"},
+                    {"document": (f"pass-{wid}.txt", text.encode("utf-8"))}, token=TOKEN)
     return None
 
 
@@ -615,6 +651,12 @@ def hantera(text):
         except Exception as exc:
             logger.exception("Fel i /%s", namn)
             return f"Kunde inte ta fram veckorapporten: {exc}"
+    if namn == "pass":
+        try:
+            return cmd_pass(arg)
+        except Exception as exc:
+            logger.exception("Fel i /pass")
+            return f"Kunde inte visa passet: {html.escape(str(exc))}"
     fn = KOMMANDON.get(namn)
     if fn is None:
         return f"Okänt kommando: /{ord_}\n\n<code>/hjalp</code> visar alla."
@@ -673,7 +715,7 @@ def main():
                 continue
             logger.info("Tog emot: %s", text[:120])
             svar_text = hantera(text)
-            # /veckorapport svarar med en fil och har inget att lägga till.
+            # Svar som kom som fil har inget att lägga till.
             if svar_text:
                 skicka(svar_text)
 

@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 140 tester, körbara ur en färsk klon med en ny venv
+  parsrarna. Sviten har 157 tester, körbara ur en färsk klon med en ny venv
   ur `requirements.txt`. Koordinaterna är nollade i fixturerna, se
   `tests/data/README.md`.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
@@ -518,6 +518,16 @@ att antalet pass är oförändrat. VACUUM behöver ungefär lika mycket ledigt
 utrymme som databasen är stor.
 
 ---
+
+## /pass — byggd 2026-11-05
+
+`/pass 58` visar allt som finns lagrat om ett pass, för när ett tal ser fel ut i en
+rapport. `passvisning.py` hittar tabellerna via främmande nycklar mot `workout` och
+läser `SELECT *`, så det finns ingen fältlista att glömma något i. Tomma fält står
+som NULL och saknade rader som "inga rader". Läser från `workout`, så dolda pass och
+dubbletter syns. Skrivskyddad anslutning; för långt för ett meddelande blir fil.
+`raw_import.payload` ingår inte, bara `raw_import_id`: den kan vara 16 MB och är
+ett rullande fönster med andra pass.
 
 ## /veckorapport — byggd 2026-11-05
 
