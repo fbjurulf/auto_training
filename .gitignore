@@ -7,5 +7,6 @@ __pycache__/
 *.db-shm
 .telegram_offset
 fit/
+!tests/data/fit/
 rapporter/
 logs/

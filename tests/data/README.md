@@ -1,14 +1,19 @@
 # Testdata: riktiga pass med facit
 
-**Innehåller GPS-spår från riktiga pass.** HAE-filerna har `route` med
-koordinater för löp- och vandringspassen. FIT-filerna har
-positionsdata i varje record. Simpassen är inomhus och saknar GPS.
-Repot är privat, och rutterna är committade orörda med avsikt (beslut
-2026-11-03). Ska repot delas måste den här katalogen hanteras först.
+**HAE-filerna innehåller GPS-spår från riktiga pass:** `route` med
+koordinater för löp- och vandringspassen. Repot är privat, och de är
+committade orörda med avsikt (beslut 2026-11-03). Ska repot delas måste
+de hanteras först, också i historiken. FIT-filernas koordinater är
+nollade. Simpassen är inomhus och saknar GPS.
 
 ## Innehåll
 
-- `fit/`: FIT-filerna byte för byte som de ligger i `fit/` på Pi:n.
+- `fit/`: FIT-filerna ur `fit/` på Pi:n med koordinaterna nollade av
+  `tests/anonymisera_fit.py`, CRC omräknad. De är alltså inte identiska
+  med produktionens filer, och ska inte vara det: en fixtur ska vara
+  stabil och committad. Inget test läser koordinater. Avkodat fält för
+  fält skiljer sig inget annat fält från originalet, och tolkningen ger
+  samma rader i alla tabeller (2026-11-05).
 - `hae/`: ett workout-objekt per fil, oförändrat ur
   `raw_import.payload` i produktionen, gzippat. Filnamnet anger dag,
   sport och vilket `raw_import.id` det kommer från. Hela payloads
