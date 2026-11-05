@@ -98,37 +98,50 @@ def tempo(seg):
     return passdata.tempo_per_km(seg["duration_s"], seg["distance_m"])
 
 
-def fmt_run(conn, w):
-    rows = conn.execute(
+def _toppsegment(conn, w):
+    return conn.execute(
         """SELECT seq, kind, started_at, distance_m, duration_s, hr_avg, hr_max
            FROM workout_segment WHERE workout_id=? AND parent_id IS NULL
            ORDER BY seq""", (w["id"],)).fetchall()
 
-    rader = [
-        f"{IKON.get(w['sport_code'], '')} <b>{html.escape(w['sport_name'])}</b> · {datum(w['local_date'])}",
-        rad(f"{num(w['distance_m'] / 1000, 2)} km på {hms(w['duration_s'])}",
-            f"{mmss(w['pace_s_per_km'])}/km" if w["pace_s_per_km"] else None),
-        rad(puls(w),
-            hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"]),
-            f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
-    ]
 
-    # Blocken mellan timer-pauserna beskriver passet bättre än
-    # kilometerrastret, när de finns.
+def _block(rader, rows, w, matt):
+    """
+    Blocken mellan timer-pauserna på en rad, med matt(segment) som tempo eller
+    fart. Ger True om de visades - de beskriver passet bättre än varven.
+    """
     block = [r for r in rows if r["kind"] == "interval"]
     if block and not blockdata.palitliga(block, w["distance_m"], w["elapsed_s"]):
         rader.append("")
         rader.append(blockdata.OPALITLIG)
         block = []
     block = blockdata.sla_ihop(block)
-    if len(block) >= 2:
-        rader.append("")
-        rader.append("Block: " + " · ".join(
-            f"{num(r['distance_m'] / 1000, 2)} km {mmss(tempo(r))}"
-            f"{'*' if r['sammanslagen'] else ''}"
-            for r in block))
-        if any(r["sammanslagen"] for r in block):
-            rader.append(blockdata.FOTNOT)
+    if len(block) < 2:
+        return False
+    rader.append("")
+    rader.append("Block: " + " · ".join(
+        f"{num(r['distance_m'] / 1000, 2)} km {matt(r)}"
+        f"{'*' if r['sammanslagen'] else ''}"
+        for r in block))
+    if any(r["sammanslagen"] for r in block):
+        rader.append(blockdata.FOTNOT)
+    return True
+
+
+def fmt_run(conn, w):
+    rows = _toppsegment(conn, w)
+
+    rader = [
+        f"{IKON.get(w['sport_code'], '')} <b>{html.escape(w['sport_name'])}</b> · {datum(w['local_date'])}",
+        rad(f"{num(w['distance_m'] / 1000, 2)} km på {hms(w['duration_s'])}",
+            f"{mmss(w['pace_s_per_km'])}/km" if w["pace_s_per_km"] else None),
+        rad(puls(w),
+            hojd.text(w["ascent_m"], w["descent_m"]),
+            f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
+    ]
+
+    # Blocken beskriver passet bättre än kilometerrastret, när de finns.
+    if _block(rader, rows, w, lambda r: mmss(tempo(r))):
         return "\n".join(r for r in rader if r)
 
     hela = [r for r in rows if r["kind"] == "split"
@@ -190,12 +203,16 @@ def fmt_bike(conn, w):
         f"{IKON.get(w['sport_code'], '')} <b>{html.escape(w['sport_name'])}</b> · {datum(w['local_date'])}",
         rad(f"{num(w['distance_m'] / 1000, 2)} km på {hms(w['duration_s'])}"
             if w["distance_m"] else hms(w["duration_s"]),
-            f"{num(w['speed_avg_kmh'], 1)} km/h" if w["speed_avg_kmh"] else None),
+            f"{num(w['speed_avg_kmh'], 1)} km/h" if w["speed_avg_kmh"] else None,
+            f"max {num(w['speed_max_kmh'], 1)} km/h" if w["speed_max_kmh"] else None),
         rad(puls(w),
             f"{num(w['power_avg_w'])} W" if w["power_avg_w"] else None,
-            hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"]),
+            hojd.text(w["ascent_m"], w["descent_m"]),
             f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
     ]
+    # Bara blocken: varven är elva rader på ett pass som 04-25.
+    _block(rader, _toppsegment(conn, w), w,
+           lambda r: f"{num(passdata.fart_kmh(r['duration_s'], r['distance_m']), 1)} km/h")
     return "\n".join(r for r in rader if r)
 
 
@@ -204,7 +221,7 @@ def fmt_generic(conn, w):
         f"{IKON.get(w['sport_code'], '🏅')} <b>{html.escape(w['sport_name'])}</b> · {datum(w['local_date'])}",
         rad(hms(w["duration_s"]),
             f"{num(w['distance_m'] / 1000, 2)} km" if w["distance_m"] else None),
-        rad(puls(w), hojd.text(w["ascent_m"], w["descent_m"], w["ascent_apple_m"]),
+        rad(puls(w), hojd.text(w["ascent_m"], w["descent_m"]),
             f"{num(w['kcal_active'])} kcal" if w["kcal_active"] else None),
     ]
     if w["rpe"]:

@@ -39,6 +39,8 @@ puls, segment, simstatistik och zontid.
 
 | Dag | Sport | Varför |
 |---|---|---|
+| 2026-04-25 | cykel | snittfart och maxfart, block och varv |
+| 2026-04-30 | cykel | 2 h 15 min paus |
 | 2026-09-30 | simning | set med 10 s stopp, längsta utan stopp |
 | 2026-10-04 | löpning | 32 km, dubblettrisk HAE/FIT |
 | 2026-10-07 | simning | korta stopp, A6 |

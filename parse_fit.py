@@ -608,6 +608,21 @@ def main(omtolka=()):
                  (session.get("avg_step_length") or 0) / 1000 or None,
                  session.get("avg_power")))
 
+        elif session.get("sport") == "cycling":
+            # Bara farten: effekt och kadens finns inte i klockans filer och
+            # verifieras mot en riktig fil när trainern kommer. Höjden ligger i
+            # workout.ascent_m sedan del B, inte här.
+            snitt = session.get("enhanced_avg_speed") or session.get("avg_speed")
+            maxfart = session.get("enhanced_max_speed") or session.get("max_speed")
+            conn.execute(
+                """INSERT INTO workout_bike (workout_id, speed_avg_kmh, speed_max_kmh)
+                   VALUES (?,?,?)
+                   ON CONFLICT(workout_id) DO UPDATE SET
+                     speed_avg_kmh=excluded.speed_avg_kmh,
+                     speed_max_kmh=excluded.speed_max_kmh""",
+                (workout_id, round(snitt * 3.6, 2) if snitt else None,
+                 round(maxfart * 3.6, 2) if maxfart else None))
+
         # Pulszoner
         zoner = zone_seconds(conn, msgs.get("record", []))
         conn.execute("DELETE FROM workout_zone WHERE workout_id=?", (workout_id,))

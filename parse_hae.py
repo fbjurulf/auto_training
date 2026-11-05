@@ -441,8 +441,9 @@ def main():
 
     conn.execute(
         """UPDATE import_run SET finished_at=?, status='ok',
-           new_count=?, updated_count=?, skipped_count=? WHERE id=?""",
-        (to_utc_str(datetime.now(timezone.utc)), new, updated, skipped, run_id))
+           new_count=?, updated_count=?, skipped_count=?, skipped_detail=? WHERE id=?""",
+        (to_utc_str(datetime.now(timezone.utc)), new, updated, skipped,
+         ", ".join(sorted(str(u) for u in unknown)), run_id))
     conn.commit()
 
     logger.info("Tolkade %s payloads: %s nya, %s uppdaterade, %s hoppade",

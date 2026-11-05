@@ -8,6 +8,7 @@ import shutil
 import sqlite3
 import tempfile
 import unittest
+from datetime import date
 from unittest.mock import patch
 
 os.environ.setdefault("TRANING_BOT_LOG", os.path.join(tempfile.gettempdir(), "traning-test-bot.log"))
@@ -114,6 +115,28 @@ class EachKindTests(Faltkontroll):
         self.assertIn("Källa: manual", text)
         self.assertIn("FIT-status: ingen, manuellt loggat", text)
         self.assertIn("notes=Tungt i benen", text)
+
+    def test_manual_bike_gets_a_row_with_speed_from_distance_and_time(self):
+        f = telegram_logg.tolka_rad(self.c, "cykel 1h45 45km")
+        wid, _, _ = telegram_logg.skapa_pass(self.c, f)
+        rad = self.c.execute("SELECT * FROM workout_bike WHERE workout_id=?", (wid,)).fetchone()
+        self.assertEqual(rad["speed_avg_kmh"], round(45 / 1.75, 2))
+        self.assertIsNone(rad["speed_max_kmh"], "ett manuellt pass har ingen maxfart")
+        self.assertIsNone(rad["power_avg_w"])
+        mon, sun = weekly.week_bounds(date.today())
+        self.assertIn("snittfart 25,7 km/h", weekly.build_report(self.c, mon, sun))
+
+    def test_manual_bike_without_distance_has_a_row_and_no_speed(self):
+        f = telegram_logg.tolka_rad(self.c, "spinning 45min")
+        wid, _, _ = telegram_logg.skapa_pass(self.c, f)
+        rad = self.c.execute("SELECT * FROM workout_bike WHERE workout_id=?", (wid,)).fetchone()
+        self.assertIsNotNone(rad)
+        self.assertIsNone(rad["speed_avg_kmh"])
+
+    def test_manual_other_sport_gets_no_bike_row(self):
+        f = telegram_logg.tolka_rad(self.c, "tennis 90min")
+        telegram_logg.skapa_pass(self.c, f)
+        self.assertEqual(self.c.execute("SELECT count(*) FROM workout_bike").fetchone()[0], 0)
 
     def test_open_water_says_why_and_shows_missing_swim_row(self):
         text = self.assertAllaFalt(self.c, _pass(self.c, "swim_open", fit_enriched=1))

@@ -484,6 +484,117 @@ def health_section(conn, start: date, end: date, idag: date):
 
 # ---------- rapport ----------
 
+# Vad som skiljer löp- och cykeltabellerna. Resten av avsnittet är samma kod.
+LOP = {"kolumn": "Tempo", "auto": "Km", "raster": "Kilometermarkeringar",
+       "varde": lambda sek, m: mmss(passdata.tempo_per_km(sek, m))}
+CYKEL = {"kolumn": "Km/h", "auto": "Varv", "raster": "Varv",
+         "varde": lambda sek, m: n(passdata.fart_kmh(sek, m), 1)}
+
+
+def _block_och_varv(L, w, segs, matt):
+    """Block mellan pauser och varvtabell för ett pass, med matt som LOP eller CYKEL."""
+    # Blocken mellan timer-pauserna är passets verkliga struktur.
+    # Kilometervarven är ett raster klockan lägger på, och skär
+    # rakt igenom den.
+    block = [s for s in segs if s["kind"] == "interval"]
+    if block and not blockdata.palitliga(block, w["distance_m"], w["elapsed_s"]):
+        L.append("")
+        L.append(blockdata.OPALITLIG)
+        block = []
+    visade = blockdata.sla_ihop(block)
+    if len(visade) < 2:
+        block = []
+    if block:
+        L.append("")
+        L.append("**Block mellan pauser** - så passet faktiskt kördes")
+        L.append("")
+        L.append(f"| Block | Distans | Tid | {matt['kolumn']} | Puls | Max |")
+        L.append("|---|---|---|---|---|---|")
+        for i, s in enumerate(visade, 1):
+            dist = s["distance_m"] or 0
+            dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
+                        else f"{n(dist, 0)} m" if dist else "-")
+            L.append(f"| {i}{'*' if s['sammanslagen'] else ''} | {dist_txt} "
+                     f"| {hms(s['duration_s'])} "
+                     f"| {matt['varde'](s['duration_s'], dist)} | {s['hr_avg'] or '-'} "
+                     f"| {s['hr_max'] or '-'} |")
+        if any(s["sammanslagen"] for s in visade):
+            L.append("")
+            L.append(blockdata.FOTNOT)
+        paus = (w["elapsed_s"] or 0) - sum(s["duration_s"] or 0 for s in block)
+        if paus > 30:
+            L.append("")
+            L.append(f"Mellan blocken: {hms(paus)} med klockan pausad.")
+
+    varv = [s for s in segs if s["kind"] == "split"]
+    if varv:
+        # Varven är dina egna varvtryck bara om klockan säger det.
+        # Är de distanstriggade är det ett raster, inte struktur,
+        # och rubriken ska inte antyda något annat.
+        triggers = set()
+        for s in varv:
+            ex = json.loads(s["extra"]) if s["extra"] else {}
+            if ex.get("lap_trigger"):
+                triggers.add(ex["lap_trigger"])
+        auto = triggers and triggers <= {"distance", "time"}
+        rubrik = matt["auto"] if auto else "Varv"
+
+        L.append("")
+        if block:
+            L.append(f"**{matt['raster'] if auto else 'Varv'}** - "
+                     + ("klockans automatiska raster"
+                        if auto else "dina egna varvtryck"))
+            L.append("")
+        L.append(f"| {rubrik} | Distans | Tid | {matt['kolumn']} | Puls | Max |")
+        L.append("|---|---|---|---|---|---|")
+        for i, s in enumerate(varv, 1):
+            dist = s["distance_m"] or 0
+            # Tempot räknas ur segmentets tid och distans i stället
+            # för att läsas ur ett fält som bara HAE-parsern fyller.
+            dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
+                        else f"{n(dist, 0)} m")
+            L.append(f"| {i} | {dist_txt} | {hms(s['duration_s'])} "
+                     f"| {matt['varde'](s['duration_s'], dist)} | {s['hr_avg'] or '-'} "
+                     f"| {s['hr_max'] or '-'} |")
+
+        # Varvens tid går mot aktiv eller förfluten tid beroende på
+        # varvtyp (A2a). Referensen väljs ur summan och skrivs ut.
+        paus_s = (w["elapsed_s"] or 0) - (w["duration_s"] or 0)
+        summa = sum(s["duration_s"] or 0 for s in varv)
+        referens, varna, svans = blockdata.varv_kontroll(
+            varv, w["duration_s"], w["elapsed_s"], w["ended_at"])
+        if svans:
+            L.append("")
+            L.append(f"Varven täcker inte passets sista "
+                     f"{f'{round(svans)} s' if svans < 60 else hms(svans)}.")
+        if paus_s > 5:
+            L.append("")
+            L.append(f"Passet pausades {hms(paus_s)} totalt. " + (
+                "Varven räknas på aktiv tid - pauserna ligger utanför varven."
+                if referens == "aktiv" else
+                "Varven räknas på förfluten tid - pauserna ingår i varven."))
+        if w["duration_s"] and varna:
+            L.append("")
+            L.append(f"Obs: varven summerar till {hms(summa)} mot passets "
+                     f"aktiva tid {hms(w['duration_s'])} och förflutna tid "
+                     f"{hms(w['elapsed_s'])}. Avvikelsen förklaras inte av "
+                     f"pausen och bör kontrolleras.")
+
+        # Handledsmätare spikar ofta de första minuterna innan de
+        # låser på. Syns passets maxpuls bara i första segmentet,
+        # och ligger långt över dess snitt, är det sannolikt brus.
+        forsta = (block or varv)[0]
+        if (w["hr_max"] and forsta["hr_max"] == w["hr_max"]
+                and forsta["hr_avg"]
+                and forsta["hr_max"] - forsta["hr_avg"] > 25):
+            L.append("")
+            L.append(f"Passets maxpuls {w['hr_max']} nåddes i första "
+                     f"segmentet, där snittet var {forsta['hr_avg']}. "
+                     f"Optisk pulsmätning spikar ofta innan sensorn "
+                     f"låst på - värdet kan vara en artefakt, och i så "
+                     f"fall är också zontiden i Z4-Z5 överskattad.")
+
+
 def delvis_vecka(start: date, end: date, slut: datetime) -> bool:
     """Har veckan börjat men inte nått sin sista dag? Söndagen räknas som hel."""
     return start <= slut.date() < end
@@ -677,108 +788,18 @@ def build_report(conn, start: date, end: date, now=None, slut=None) -> str:
             if extra:
                 L.append(", ".join(extra))
 
-            # Blocken mellan timer-pauserna är passets verkliga struktur.
-            # Kilometervarven är ett raster klockan lägger på, och skär
-            # rakt igenom den.
-            block = [s for s in segs if s["kind"] == "interval"]
-            if block and not blockdata.palitliga(block, w["distance_m"], w["elapsed_s"]):
-                L.append("")
-                L.append(blockdata.OPALITLIG)
-                block = []
-            visade = blockdata.sla_ihop(block)
-            if len(visade) < 2:
-                block = []
-            if block:
-                L.append("")
-                L.append("**Block mellan pauser** - så passet faktiskt kördes")
-                L.append("")
-                L.append("| Block | Distans | Tid | Tempo | Puls | Max |")
-                L.append("|---|---|---|---|---|---|")
-                for i, s in enumerate(visade, 1):
-                    dist = s["distance_m"] or 0
-                    tempo = passdata.tempo_per_km(s["duration_s"], dist)
-                    dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
-                                else f"{n(dist, 0)} m" if dist else "-")
-                    L.append(f"| {i}{'*' if s['sammanslagen'] else ''} | {dist_txt} "
-                             f"| {hms(s['duration_s'])} "
-                             f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
-                             f"| {s['hr_max'] or '-'} |")
-                if any(s["sammanslagen"] for s in visade):
-                    L.append("")
-                    L.append(blockdata.FOTNOT)
-                paus = (w["elapsed_s"] or 0) - sum(s["duration_s"] or 0 for s in block)
-                if paus > 30:
-                    L.append("")
-                    L.append(f"Mellan blocken: {hms(paus)} med klockan pausad.")
+            _block_och_varv(L, w, segs, LOP)
 
-            varv = [s for s in segs if s["kind"] == "split"]
-            if varv:
-                # Varven är dina egna varvtryck bara om klockan säger det.
-                # Är de distanstriggade är det ett raster, inte struktur,
-                # och rubriken ska inte antyda något annat.
-                triggers = set()
-                for s in varv:
-                    ex = json.loads(s["extra"]) if s["extra"] else {}
-                    if ex.get("lap_trigger"):
-                        triggers.add(ex["lap_trigger"])
-                auto = triggers and triggers <= {"distance", "time"}
-                rubrik = "Km" if auto else "Varv"
+        elif det and w["sport_code"].startswith("bike"):
+            extra = []
+            if det["speed_avg_kmh"]:
+                extra.append(f"snittfart {n(det['speed_avg_kmh'], 1)} km/h")
+            if det["speed_max_kmh"]:
+                extra.append(f"maxfart {n(det['speed_max_kmh'], 1)} km/h")
+            if extra:
+                L.append(", ".join(extra))
 
-                L.append("")
-                if block:
-                    L.append(f"**{'Kilometermarkeringar' if auto else 'Varv'}** - "
-                             + ("klockans automatiska raster, spänner över pauserna"
-                                if auto else "dina egna varvtryck"))
-                    L.append("")
-                L.append(f"| {rubrik} | Distans | Tid | Tempo | Puls | Max |")
-                L.append("|---|---|---|---|---|---|")
-                for i, s in enumerate(varv, 1):
-                    dist = s["distance_m"] or 0
-                    # Tempot räknas ur segmentets tid och distans i stället
-                    # för att läsas ur ett fält som bara HAE-parsern fyller.
-                    tempo = passdata.tempo_per_km(s["duration_s"], dist)
-                    dist_txt = (f"{n(dist / 1000, 2)} km" if dist >= 990
-                                else f"{n(dist, 0)} m")
-                    L.append(f"| {i} | {dist_txt} | {hms(s['duration_s'])} "
-                             f"| {mmss(tempo)} | {s['hr_avg'] or '-'} "
-                             f"| {s['hr_max'] or '-'} |")
-
-                # Varvens tid går mot aktiv eller förfluten tid beroende på
-                # varvtyp (A2a). Referensen väljs ur summan och skrivs ut.
-                paus_s = (w["elapsed_s"] or 0) - (w["duration_s"] or 0)
-                summa = sum(s["duration_s"] or 0 for s in varv)
-                referens, varna, svans = blockdata.varv_kontroll(
-                    varv, w["duration_s"], w["elapsed_s"], w["ended_at"])
-                if svans:
-                    L.append("")
-                    L.append(f"Varven täcker inte passets sista "
-                             f"{f'{round(svans)} s' if svans < 60 else hms(svans)}.")
-                if paus_s > 5:
-                    L.append("")
-                    L.append(f"Passet pausades {hms(paus_s)} totalt. " + (
-                        "Varven räknas på aktiv tid - pauserna ligger utanför varven."
-                        if referens == "aktiv" else
-                        "Varven räknas på förfluten tid - pauserna ingår i varven."))
-                if w["duration_s"] and varna:
-                    L.append("")
-                    L.append(f"Obs: varven summerar till {hms(summa)} mot passets "
-                             f"aktiva tid {hms(w['duration_s'])} och förflutna tid "
-                             f"{hms(w['elapsed_s'])}. Avvikelsen förklaras inte av "
-                             f"pausen och bör kontrolleras.")
-
-                # Handledsmätare spikar ofta de första minuterna innan de
-                # låser på. Syns passets maxpuls bara i första segmentet,
-                # och ligger långt över dess snitt, är det sannolikt brus.
-                forsta = (block or varv)[0]
-                if (w["hr_max"] and forsta["hr_max"] == w["hr_max"]
-                        and forsta["hr_avg"]
-                        and forsta["hr_max"] - forsta["hr_avg"] > 25):
-                    L.append("")
-                    L.append(f"Passets maxpuls {w['hr_max']} nåddes i första "
-                             f"segmentet, där snittet var {forsta['hr_avg']}. "
-                             f"Optisk pulsmätning spikar ofta innan sensorn "
-                             f"låst på - värdet kan vara en artefakt, och i så "
-                             f"fall är också zontiden i Z4-Z5 överskattad.")
+            _block_och_varv(L, w, segs, CYKEL)
 
         elif det and w["sport_code"].startswith("swim"):
             har_fit = det["active_s"] is not None

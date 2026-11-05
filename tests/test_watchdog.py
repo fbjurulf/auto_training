@@ -1,6 +1,9 @@
+import shutil
 import subprocess
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import watchdog
@@ -11,9 +14,14 @@ class WatchdogTests(unittest.TestCase):
     def setUp(self):
         self.conn = build_db()
         self.now = datetime(2026, 11, 1, 8, tzinfo=timezone.utc)
+        self.tmp = tempfile.mkdtemp(prefix="traning-test-")
+        p = patch.object(watchdog, "OKANDA_PATH", Path(self.tmp) / "larmade")
+        p.start()
+        self.addCleanup(p.stop)
 
     def tearDown(self):
         self.conn.close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_recent_data_and_healthy_services_do_not_alert(self):
         _raw_import(self.conn, "2026-10-31T12:00:00Z")
@@ -56,6 +64,67 @@ class WatchdogTests(unittest.TestCase):
             "FIT-import 2026-11-01T07:00:00Z: 2 okända sporter: "
             "cross_country_skiing/generic, racket/badminton.",
         )
+
+    def _hae_run(self, started_at, detalj):
+        self.conn.execute(
+            """INSERT INTO import_run (source_id, run_type, started_at, status, skipped_detail)
+               VALUES ((SELECT id FROM source WHERE code='apple_health_hae'), 'push', ?, 'ok', ?)""",
+            (started_at, detalj))
+
+    def _kor(self, send=None):
+        with patch.object(watchdog, "send_alert", send or (lambda m: None)):
+            return [a for a in watchdog.run_checks(self.conn, self.now, run=lambda *a, **k: _success())
+                    if "HAE" in a]
+
+    def test_unknown_hae_sport_alerts_once_per_name(self):
+        self._hae_run("2026-10-31T20:00:00Z", "Utomhus Cykling")
+        self.assertEqual(len(self._kor()), 1)
+        self.assertEqual(self._kor(), [], "samma namn får inte larma igen")
+        self._hae_run("2026-11-01T07:00:00Z", "Utomhus Cykling")
+        self.assertEqual(self._kor(), [], "inte heller när HAE skickar det igen")
+        self._hae_run("2026-11-01T07:30:00Z", "Utomhus Cykling, Yoga")
+        nytt = self._kor()
+        self.assertTrue(nytt[0].endswith("sport_alias: Yoga."), nytt)
+
+    def test_failed_alert_is_tried_again(self):
+        self._hae_run("2026-10-31T20:00:00Z", "Utomhus Cykling")
+
+        def trasig(_):
+            raise RuntimeError("Telegram nere")
+        with self.assertRaises(RuntimeError):
+            self._kor(trasig)
+        self.assertEqual(len(self._kor()), 1)
+
+    def test_old_run_still_alerts_if_never_alerted(self):
+        # Ingen tidsgräns: en missad vakthundskörning får inte tappa namnet.
+        self._hae_run("2026-09-01T07:00:00Z", "Utomhus Cykling")
+        self.assertEqual(len(self._kor()), 1)
+
+    def test_name_with_alias_does_not_alert(self):
+        self._hae_run("2026-11-01T07:00:00Z", "Öppet vatten Simning")
+        self.assertEqual(self._kor(), [])
+
+    def test_watchdog_does_not_write_to_the_database(self):
+        self._hae_run("2026-10-31T20:00:00Z", "Utomhus Cykling")
+        self.conn.commit()
+        fore = self.conn.total_changes
+        self._kor()
+        self.assertEqual(self.conn.total_changes, fore)
+
+    def test_unknown_hae_sport_alerts_with_its_name(self):
+        # Mitt i dygnet: en senare körning utan okända får inte dölja larmet.
+        self._hae_run("2026-10-31T20:00:00Z", "Utomhus Cykling")
+        self._hae_run("2026-11-01T07:00:00Z", "")
+        alerts = watchdog.database_alerts(self.conn, self.now)
+        self.assertIn("Okända sporter från HAE, passen importeras inte därifrån. "
+                      "Lägg till i sport_alias: Utomhus Cykling.", alerts)
+
+    def test_unknown_hae_sports_are_listed_once(self):
+        self._hae_run("2026-11-01T06:00:00Z", "Utomhus Cykling, Yoga")
+        self._hae_run("2026-11-01T07:00:00Z", "Utomhus Cykling")
+        alert = [a for a in watchdog.database_alerts(self.conn, self.now) if "HAE" in a]
+        self.assertEqual(len(alert), 1)
+        self.assertTrue(alert[0].endswith("sport_alias: Utomhus Cykling, Yoga."), alert[0])
 
     def test_latest_fit_run_without_skips_does_not_alert_for_older_skips(self):
         _fit_run(self.conn, 1, "2026-10-31T07:00:00Z", 7,

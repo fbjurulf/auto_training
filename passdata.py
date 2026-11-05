@@ -101,6 +101,13 @@ def tempo_per_km(duration_s, distance_m):
     return duration_s / (distance_m / 1000.0)
 
 
+def fart_kmh(duration_s, distance_m):
+    """Kilometer i timmen, eller None för segment utan distans."""
+    if not duration_s or not distance_m or distance_m <= TEMPO_MIN_M:
+        return None
+    return distance_m / duration_s * 3.6
+
+
 def tempo_per_100m(duration_s, distance_m):
     """Sekunder per 100 m, eller None."""
     if not duration_s or not distance_m or distance_m <= 0:

@@ -117,6 +117,60 @@ class SwimTests(unittest.TestCase):
                          f"varv: {[(s['kind'], s['distance_m']) for s in laps]}")
 
 
+class BikeTests(unittest.TestCase):
+    def _bike(self, nyckel):
+        w = _workout(FACIT[nyckel]["local_date"], "bike")
+        return w, conn.execute("SELECT * FROM workout_bike WHERE workout_id = ?", (w["id"],)).fetchone()
+
+    def test_average_speed_is_distance_over_active_time(self):
+        # Sessionsfältet och distans delat med aktiv tid är samma tal. Pass 33 har
+        # 2 h 15 min paus: på förfluten tid vore det 8,5 km/h.
+        for nyckel in ("bike_2026_04_25", "bike_2026_04_30"):
+            with self.subTest(nyckel):
+                w, d = self._bike(nyckel)
+                self.assertEqual(round(w["distance_m"] / w["duration_s"] * 3.6, 2), d["speed_avg_kmh"])
+
+    def test_max_speed_is_the_session_field(self):
+        for nyckel in ("bike_2026_04_25", "bike_2026_04_30"):
+            with self.subTest(nyckel):
+                _, d = self._bike(nyckel)
+                self.assertEqual(d["speed_max_kmh"], round(FACIT[nyckel]["session_max_speed_mps"] * 3.6, 2))
+
+    def test_power_cadence_and_elevation_stay_empty(self):
+        _, d = self._bike("bike_2026_04_25")
+        for falt in ("power_avg_w", "power_max_w", "power_normalized_w", "cadence_avg_rpm",
+                     "elevation_gain_m"):
+            self.assertIsNone(d[falt], falt)
+
+    def test_report_section_like_the_run_section(self):
+        section = _report_section(FACIT["bike_2026_04_30"]["local_date"], "Cykling")
+        self.assertIn("snittfart 20,5 km/h, maxfart 43,6 km/h", section)
+        self.assertIn("**Block mellan pauser**", section)
+        self.assertIn("| Block | Distans | Tid | Km/h | Puls | Max |", section)
+        self.assertIn("| Varv | Distans | Tid | Km/h | Puls | Max |", section)
+        self.assertIn("Varven räknas på aktiv tid", section)
+        self.assertNotIn("spänner över", section)
+        self.assertNotIn("| Km |", section, "varven är 5 km, inte ett kilometerraster")
+        self.assertNotIn("Tempo", section)
+
+    def test_summary_shows_the_same_speeds(self):
+        import notify
+        w, _ = self._bike("bike_2026_04_30")
+        kort = notify.build_message(conn, w["id"], "bike")
+        self.assertIn("20,5 km/h · max 43,6 km/h", kort)
+        self.assertIn("Block: 5,24 km 18,6 km/h · 12,12 km 21,8 km/h · 15,47 km 20,3 km/h", kort)
+        self.assertNotIn("Varv", kort)
+        self.assertNotIn("Apple", kort)
+
+    def test_reparsing_changes_nothing(self):
+        import parse_fit
+        w, fore = self._bike("bike_2026_04_25")
+        fil = next(p for p in parse_fit.FIT_DIR.glob("2026-04-25*"))
+        parse_fit.main([str(fil)])
+        _, efter = self._bike("bike_2026_04_25")
+        self.assertEqual(tuple(fore), tuple(efter))
+
+
 class RunTests(unittest.TestCase):
     def test_2026_10_22_lap_2(self):
         f = FACIT["run_2026_10_22"]
@@ -141,6 +195,13 @@ class RunTests(unittest.TestCase):
         f = FACIT["run_2026_10_18"]
         w = _workout(f["local_date"], "run")
         self.assertEqual(w["elapsed_s"] - w["duration_s"], f["pause_s"])
+
+    def test_distance_laps_do_not_claim_to_span_the_pauses(self):
+        # Rubriken sa det, medan raden under tabellen sa motsatsen. Varvens summa
+        # avgör: distansvarv går mot aktiv tid (A2a).
+        section = _report_section(FACIT["run_2026_10_18"]["local_date"], "Löpning")
+        self.assertIn("**Kilometermarkeringar** - klockans automatiska raster", section)
+        self.assertNotIn("spänner över", section)
 
     def test_2026_10_18_no_integrity_warning(self):
         f = FACIT["run_2026_10_18"]

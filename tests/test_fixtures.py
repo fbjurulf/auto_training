@@ -4,7 +4,7 @@ from tests.fixtures import build_db
 
 # Radantal i produktionen 2026-11-03, plus det migrationerna lägger till.
 # Genereras grundfilerna om ska siffrorna verifieras mot Pi:n på nytt.
-REFERENCE_COUNTS = {"sport": 13, "sport_alias": 15, "source": 5, "hr_zone": 4}
+REFERENCE_COUNTS = {"sport": 13, "sport_alias": 16, "source": 5, "hr_zone": 4}
 VIEWS = ("v_workout", "v_swim", "v_run", "v_bike", "v_zon")
 
 

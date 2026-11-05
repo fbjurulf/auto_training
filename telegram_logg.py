@@ -38,6 +38,7 @@ from datetime import date, datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import passdata
 import passvisning
 import weekly
 
@@ -269,7 +270,7 @@ def senaste_pass(conn, antal=8):
 
 def skapa_pass(conn, f):
     sport = conn.execute(
-        "SELECT id, name_sv FROM sport WHERE code=?", (f["sport"],)).fetchone()
+        "SELECT id, name_sv, detail_table FROM sport WHERE code=?", (f["sport"],)).fetchone()
     if sport is None:
         raise ValueError(f"Okänd sport: {f['sport']}")
 
@@ -299,6 +300,12 @@ def skapa_pass(conn, f):
 
     wid = conn.execute(
         "SELECT id FROM workout WHERE external_id=?", (ext,)).fetchone()["id"]
+    # Utan rad här ger v_bike inget, och passet skulle sakna km/h i rapporterna.
+    if sport["detail_table"] == "workout_bike":
+        fart = passdata.fart_kmh(dur, f["distance_m"])
+        conn.execute("INSERT INTO workout_bike (workout_id, speed_avg_kmh) VALUES (?,?)",
+                     (wid, round(fart, 2) if fart else None))
+        conn.commit()
     return wid, sport["name_sv"], start
 
 

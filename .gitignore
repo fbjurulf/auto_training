@@ -6,6 +6,7 @@ __pycache__/
 *.db-wal
 *.db-shm
 .telegram_offset
+.hae_okanda_larmade
 fit/
 !tests/data/fit/
 rapporter/

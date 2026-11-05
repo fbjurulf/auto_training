@@ -20,6 +20,12 @@ DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 LOG_PATH = os.environ.get(
     "TRANING_WATCHDOG_LOG", str(BASE_DIR / "logs" / "watchdog.log")
 )
+# Vilka okända HAE-sporter som redan larmats. En egen fil, som .telegram_offset:
+# vakthunden går utan pipelinens lås och skriver inte till databasen. Väntade den
+# på låset skulle en hängd pipeline tysta också vakthunden.
+OKANDA_PATH = Path(os.environ.get(
+    "TRANING_WATCHDOG_OKANDA", str(BASE_DIR / ".hae_okanda_larmade")
+))
 TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
@@ -43,6 +49,31 @@ def _utc_datetime(value):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _larmade():
+    try:
+        return set(OKANDA_PATH.read_text(encoding="utf-8").splitlines())
+    except OSError:
+        return set()
+
+
+def okanda_hae_sporter(conn):
+    """
+    Sportnamn HAE skickat som saknar alias och inte larmats än. Söker i alla
+    körningar, inte ett tidsfönster: en payload tolkas bara en gång, och ett
+    misslyckat utskick eller en missad körning får inte tappa namnet.
+    """
+    namn = set()
+    for (detalj,) in conn.execute(
+            """SELECT DISTINCT ir.skipped_detail FROM import_run ir
+               JOIN source s ON s.id = ir.source_id
+               WHERE s.code = 'apple_health_hae' AND ir.skipped_detail <> ''"""):
+        namn.update(n.strip() for n in detalj.split(",") if n.strip())
+    alias = {r[0] for r in conn.execute(
+        """SELECT a.external_code FROM sport_alias a JOIN source s ON s.id = a.source_id
+           WHERE s.code = 'apple_health_hae'""")}
+    return sorted(namn - alias - _larmade())
 
 
 def database_alerts(conn, now):
@@ -88,6 +119,15 @@ def database_alerts(conn, now):
             )
 
     fmt = "%Y-%m-%dT%H:%M:%SZ"
+
+    # Ett pass av okänd sport försvinner annars tyst om FIT-filen också saknas.
+    # En gång per namn - ett larm som upprepas slutar läsas.
+    okanda = okanda_hae_sporter(conn)
+    if okanda:
+        alerts.append(
+            "Okända sporter från HAE, passen importeras inte därifrån. Lägg till i "
+            "sport_alias: " + ", ".join(okanda) + ".")
+
     missing = [m for m in conn.execute(
         """SELECT id, local_date, sport_name, source_code, fit_enriched, started_at
            FROM v_workout WHERE source_code = 'apple_health_hae' AND fit_enriched = 0
@@ -185,10 +225,15 @@ def send_alert(message):
 
 def run_checks(conn, now=None, run=subprocess.run):
     now = now or datetime.now(timezone.utc)
+    okanda = okanda_hae_sporter(conn)
     alerts = database_alerts(conn, now) + external_alerts(run)
     if alerts:
         send_alert("Traningsarkiv - vakthund:\n- " + "\n- ".join(alerts))
         logger.error("Vakthundslarm: %s", "; ".join(alerts))
+        # Först när utskicket gått: send_alert kastar annars, och då larmar nästa körning.
+        if okanda:
+            OKANDA_PATH.write_text("\n".join(sorted(_larmade() | set(okanda))) + "\n",
+                                   encoding="utf-8")
     else:
         logger.info("Vakthund OK: import, hälsodata, Dropbox och tjänster")
     return alerts

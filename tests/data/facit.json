@@ -47,6 +47,16 @@
     "duration_s": 12209,
     "text": "Exakt ett pass, 32,27 km på 3:23:29"
   },
+  "bike_2026_04_25": {
+    "local_date": "2026-04-25",
+    "session_max_speed_mps": 13.246,
+    "text": "Snittfart = distans delat med aktiv tid, samma tal som sessionsfältet. Maxfarten är sessionsfältet, ett enda GPS-prov som inte kan kontrolleras mot något. Inte avläst i Träningsappen."
+  },
+  "bike_2026_04_30": {
+    "local_date": "2026-04-30",
+    "session_max_speed_mps": 12.116,
+    "text": "Som 04-25, med 2 h 15 min paus: på förfluten tid vore snittet 8,5 km/h i stället för 20,52."
+  },
   "week_42": {
     "start": "2026-10-12",
     "end": "2026-10-18",

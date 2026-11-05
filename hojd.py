@@ -128,14 +128,13 @@ def _km(start, slut, rorelse, pulsar, serie):
 
 def text(upp, ner, apple=None):
     """
-    'upp 120 m, ner 118 m' - och Apples värde bredvid när de skiljer mer än
-    25 %. Apple är ingen referens: samma 7,1 km-runda gav 10, 93 och 26 m.
-    Texten får därför inte läsas som att Apples tal är facit.
+    'upp 120 m, ner 118 m'. Med apple också Apples värde när de skiljer mer än
+    25 %, bara talet. Veckorapporten skickar det, notisen inte. Varför Apple
+    inte är någon referens står i kravspecen, del B.
     """
     if upp is None:
         return None
     s = f"upp {upp:.0f} m, ner {ner:.0f} m"
     if apple and abs(upp - apple) > apple * APPLE_AVVIKELSE:
-        s += (f" (Apple anger {apple:.0f} m — Apples värde varierar kraftigt på "
-              f"samma rutt och är ingen referens)")
+        s += f" (Apple {apple:.0f} m)"
     return s

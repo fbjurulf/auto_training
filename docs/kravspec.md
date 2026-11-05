@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 157 tester, körbara ur en färsk klon med en ny venv
+  parsrarna. Sviten har 178 tester, körbara ur en färsk klon med en ny venv
   ur `requirements.txt`. Koordinaterna är nollade i fixturerna, se
   `tests/data/README.md`.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
@@ -186,9 +186,9 @@ kontrollpunkt.** Apples värde varierar kraftigt på samma rutt — samma 7,1
 km-runda gav 10, 93 och 26 m; en 9,3 km-runda 56, 58 och 57 m, sedan 78, 85
 och 84 m. Ett värde som inte är stabilt mot sig självt kan inte avgöra om
 tröskeln är rätt. Apples tal sparas (`ascent_apple_m`) och visas när det
-skiljer mer än 25 %, men formulerat så att det inte läses som facit: "upp
-102 m (Apple anger 31 m — Apples värde varierar kraftigt på samma rutt och
-är ingen referens)".
+skiljer mer än 25 %, bara i veckorapporten: "upp 102 m (Apple 31 m)". Inte i
+notisen, där förklaringen blev längre än allt annat på raden. Talet finns
+också i `/pass`.
 
 **Också struken: rundkontrollen** (upp − ner nära noll på pass som börjar
 och slutar på samma ställe). Med hysteres som räknar sista segmentet är upp
@@ -518,6 +518,35 @@ att antalet pass är oförändrat. VACUUM behöver ungefär lika mycket ledigt
 utrymme som databasen är stor.
 
 ---
+
+## Cykel — byggd 2026-11-05
+
+`workout_bike` var aldrig inkopplad: ingen kod skrev till den, så `v_bike` var tom
+och `fmt_bike` hade aldrig körts. `parse_fit` skriver nu snitt- och maxfart ur
+sessionen. Snittet är distans delat med aktiv tid, exakt samma tal
+(`test_facit.BikeTests`). Maxfarten är ett enda GPS-prov utan kontrollpunkt.
+
+- **Effekt och kadens är NULL.** De finns inte i klockans filer och räknas inte
+  fram. Verifieras mot en riktig fil när trainern kommer i december.
+- **`elevation_gain_m` är tom.** Höjden ligger i `workout.ascent_m` sedan del B.
+- **Rapporten** har samma avsnitt som löpning, samma kod (`weekly._block_och_varv`):
+  block vid paus och varvtabell, med km/h i stället för tempo. "Per 10 km" är
+  struket, varven är redan 5 km.
+- **Notisen** har snitt- och maxfart och blocken på en rad, samma kod som löpnotisen
+  (`notify._block`). Inga varv: elva rader är för mycket i ett meddelande.
+- **Rubriken "spänner över pauserna" är borttagen**, för cykel och löpning. Den stod
+  sedan bygget mot raden under tabellen. Distansvarv går mot aktiv tid (A2a), pass 31:
+  8 411 s mot 8 414 s.
+- **Manuella cykelpass** får en rad med snittfart ur distans och tid.
+- **Okända HAE-sporter larmar, en gång per namn.** Ett pass av okänd sport försvinner
+  annars tyst om FIT-filen också saknas. HAE:s namn på cykling är okänt, det har inte
+  förekommit sedan HAE startade 2026-09-10. Vakthunden söker i alla körningar, utan
+  tidsfönster, eftersom en payload bara tolkas en gång. Vad som larmats står i
+  `.hae_okanda_larmade`, inte i databasen: vakthunden går utan pipelinens lås, och
+  väntade den på låset skulle en hängd pipeline tysta också den. Försvinner filen
+  larmar varje namn en gång till.
+- **Öppet vatten via HAE:** migration 0008 lägger in `Öppet vatten Simning`, avläst i
+  `raw_import` 17-19.
 
 ## /pass — byggd 2026-11-05
 

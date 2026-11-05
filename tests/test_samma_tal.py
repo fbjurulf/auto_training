@@ -72,8 +72,9 @@ class SameNumbersTests(unittest.TestCase):
     def test_elevation(self):
         for w, kort, vecka in _par():
             with self.subTest(dag=w["local_date"], sport=w["sport_code"]):
-                monster = r"upp \d+ m, ner \d+ m(?: \(Apple anger \d+ m)?"
+                monster = r"upp \d+ m, ner \d+ m"
                 self.assertEqual(re.findall(monster, kort), re.findall(monster, vecka))
+                self.assertNotIn("Apple", kort, "Apples tal står i rapporten och i /pass")
 
     def test_longest_swim_distances(self):
         for w, kort, vecka in _par():
@@ -87,6 +88,30 @@ class SameNumbersTests(unittest.TestCase):
                 i_vecka = re.findall(rf"utan stopp: {tal} m\*\*(?: · \*\*längsta med korta stopp: {tal} m)?", vecka)
                 rensa = lambda par: [tuple(re.sub(r"\s", "", x) for x in p) for p in par]
                 self.assertEqual(rensa(i_kort), rensa(i_vecka))
+
+    def test_bike_block_speeds(self):
+        visade = 0
+        for w, kort, vecka in _par():
+            if not w["sport_code"].startswith("bike"):
+                continue
+            with self.subTest(dag=w["local_date"]):
+                rad = next(l for l in kort.splitlines() if l.startswith("Block: "))
+                i_kort = re.findall(r"km ([\d,]+) km/h", rad)
+                tabell = vecka.split("**Block mellan pauser**")[1].split("\n\n**")[0]
+                i_vecka = re.findall(r"^\| \d+\*? \| [^|]+ \| [^|]+ \| ([\d,]+) \|", tabell, re.M)
+                self.assertEqual(i_kort, i_vecka)
+                visade += 1
+        self.assertEqual(visade, 2)
+
+    def test_bike_speeds(self):
+        for w, kort, vecka in _par():
+            if not w["sport_code"].startswith("bike"):
+                continue
+            with self.subTest(dag=w["local_date"]):
+                i_kort = re.findall(r"([\d,]+) km/h · max ([\d,]+) km/h", kort)
+                i_vecka = re.findall(r"snittfart ([\d,]+) km/h, maxfart ([\d,]+) km/h", vecka)
+                self.assertTrue(i_kort)
+                self.assertEqual(i_kort, i_vecka)
 
     def test_average_pace(self):
         for w, kort, vecka in _par():
