@@ -55,6 +55,9 @@ puls, segment, simstatistik och zontid.
 
 ## Köra
 
-Kräver `fitdecode` (finns i `.venv` på Pi:n):
+Beroendena är pinnade i `requirements.txt`, ur Pi:ns `.venv`. FIT-tolkning
+är versionskänslig: en annan `fitdecode` kan visa sig som ändrade facit-tal
+utan att någon kod ändrats.
 
-    python -m unittest discover -s tests -t . -v
+    python -m venv venv && venv/bin/pip install -r requirements.txt
+    venv/bin/python -m unittest discover -s tests -t . -v
