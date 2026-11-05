@@ -28,7 +28,9 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 90 tester.
+  parsrarna. Sviten har 122 tester, körbara ur en färsk klon med en ny venv
+  ur `requirements.txt`. Koordinaterna är nollade i fixturerna, se
+  `tests/data/README.md`.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
   genererade ur produktionen. Varje schemaändring går nu som numrerad
   migration i `sql/migrations/`.
@@ -519,15 +521,16 @@ utrymme som databasen är stor.
 
 ## Ordning
 
-**A2a → A2 → A8 → B → D → C → A4 → A5 → A6 → A7 + A7a → F2 → F3 →
-omkörning av v40–v43 med skillnaden mot de gamla versionerna.**
+**Stängt 2026-11-05.** A2a, A2, A8, B, D, C, A4, A6 och A9 är byggda. **A5, A7,
+A7a, F2 och F3 ligger på is** tills data visar att något är fel; avsnitten ovan
+står kvar som underlag. Fel letas inte i förväg: ett pass som ser tokigt ut i en
+rapport är startpunkten. **Omkörning av v40–v43 görs inte:** trenden räknas ur
+databasen vid varje rapport och blir rätt utan omkörning.
 
-A2a är en utredning som avgör hur A2 byggs. B före D eftersom
-höjdfunktionen är ett av D:s fall. D före C eftersom C annars skrivs två
-gånger. F3 sist av det tekniska, eftersom B måste ha sparat höjdmetrarna
-först.
+Känt och lämnat: täckningsmeningen ("handledsmätningen tappar kontakt") står också
+när orsaken är ett pass utan zondata, som 94 i v44. Passet nämns på raden ovanför.
 
-Testerna körs efter varje del. Sviten har i dag ett rött test (A4) och inga
-överhoppade. De blir gröna av att felen
+Testerna körs efter varje del, i en färsk klon med en ny venv ur
+`requirements.txt`. Inga överhoppade. Röda test blir gröna av att felen
 åtgärdas, inte av att testen justeras — om ett förväntat värde inte stämmer
 med databasen, säg till i stället för att anpassa testet.

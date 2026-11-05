@@ -1,10 +1,13 @@
 # Testdata: riktiga pass med facit
 
-**HAE-filerna innehåller GPS-spår från riktiga pass:** `route` med
-koordinater för löp- och vandringspassen. Repot är privat, och de är
-committade orörda med avsikt (beslut 2026-11-03). Ska repot delas måste
-de hanteras först, också i historiken. FIT-filernas koordinater är
-nollade. Simpassen är inomhus och saknar GPS.
+**Koordinaterna är nollade i både FIT- och HAE-filerna** (2026-11-05),
+av `tests/anonymisera_fit.py` och `tests/anonymisera_hae.py`.
+
+**Beslut 2026-11-05: historiken skrivs inte om.** HAE-filerna med riktiga
+GPS-spår ligger kvar i git-historiken från `cee2ddb` fram till nollningen.
+Repot är privat och bara Pi:n klonar det, och en omskrivning med force-push
+plus lagning av Pi:ns `git pull --ff-only` är mer arbete än det är värt. Ska
+repot någonsin delas måste historiken hanteras först.
 
 ## Innehåll
 
@@ -14,8 +17,9 @@ nollade. Simpassen är inomhus och saknar GPS.
   stabil och committad. Inget test läser koordinater. Avkodat fält för
   fält skiljer sig inget annat fält från originalet, och tolkningen ger
   samma rader i alla tabeller (2026-11-05).
-- `hae/`: ett workout-objekt per fil, oförändrat ur
-  `raw_import.payload` i produktionen, gzippat. Filnamnet anger dag,
+- `hae/`: ett workout-objekt per fil ur `raw_import.payload` i
+  produktionen, gzippat, med ruttens latitud och longitud nollade. Fält
+  som `course` och `speed` är kvar. Filnamnet anger dag,
   sport och vilket `raw_import.id` det kommer från. Hela payloads
   sparas inte: HAE skickar ett rullande fönster, så en payload på upp
   till 16 MB innehåller mest andra pass.
