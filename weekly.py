@@ -46,6 +46,7 @@ logger.addHandler(_h)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 DAGAR = ["mån", "tis", "ons", "tor", "fre", "lör", "sön"]
+DAGAR_LANGA = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
 
 # (dag, text): visas överst i rapporten för veckan som innehåller dagen.
 DEFINITIONSBYTEN = [
@@ -72,6 +73,11 @@ STEG_ANDEL = 0.40       # andel av medianen - under detta är dagen påfallande 
 BASLINJE_MIN_DAGAR = 10 # färre än så: ingen jämförelse alls
 LUGNA_ZONER = ("Z1-Z2",)  # zoner som räknas som lugn träning i 80/20-måttet
 ZON_MAL = 80            # andel av träningstiden som bör ligga lugnt
+
+
+def _nu():
+    """Lokal tid just nu - rapportens sluttidpunkt om inget annat anges."""
+    return datetime.now()
 
 
 # ---------- formatering ----------
@@ -310,7 +316,7 @@ def veckor_med_data(conn, start: date, antal=4):
 
 # ---------- återhämtning ----------
 
-def health_section(conn, start: date, end: date):
+def health_section(conn, start: date, end: date, idag: date):
     """
     Hälsodata för veckan: sammanfattning, dygnstabell och en uttrycklig
     rad per mätvärde. Baslinjen är medianen för 28 dagar före veckan -
@@ -322,7 +328,7 @@ def health_section(conn, start: date, end: date):
     """
     bas_start, bas_slut = start - timedelta(days=28), start - timedelta(days=1)
 
-    serier = {m: metrics_between(conn, m, start, end) for m in
+    serier = {m: metrics_between(conn, m, start, min(end, idag)) for m in
               ("resting_heart_rate", "heart_rate_variability",
                "sleep_analysis", "step_count", "vo2_max")}
     baslinje = {m: median(metrics_between(conn, m, bas_start, bas_slut).values())
@@ -382,7 +388,7 @@ def health_section(conn, start: date, end: date):
 
     for i in range(7):
         d = start + timedelta(days=i)
-        if d > date.today():
+        if d > idag:
             break
         key = d.isoformat()
         etikett = f"{DAGAR[d.weekday()]} {d.day}/{d.month}"
@@ -455,7 +461,6 @@ def health_section(conn, start: date, end: date):
 
     # Skilj på nätter som kan komma i efterhand och nätter där klockan
     # helt enkelt inte var på - annars förklarar rapporten fel sak.
-    idag = date.today()
     saknas, kan_droja = [], []
     for i in range(7):
         d = start + timedelta(days=i)
@@ -479,13 +484,37 @@ def health_section(conn, start: date, end: date):
 
 # ---------- rapport ----------
 
-def build_report(conn, start: date, end: date, now=None) -> str:
+def delvis_vecka(start: date, end: date, slut: datetime) -> bool:
+    """Har veckan börjat men inte nått sin sista dag? Söndagen räknas som hel."""
+    return start <= slut.date() < end
+
+
+def delvis_rad(start: date, slut: datetime) -> str:
+    """Raden överst i en ofullständig vecka: 'Vecka 45, delvis - måndag till torsdag 13:55.'"""
+    dag = DAGAR_LANGA[slut.weekday()]
+    spann = (f"{dag} {slut:%H:%M}" if slut.date() == start
+             else f"{DAGAR_LANGA[start.weekday()]} till {dag} {slut:%H:%M}")
+    return f"Vecka {start.isocalendar()[1]}, delvis - {spann}."
+
+
+def build_report(conn, start: date, end: date, now=None, slut=None) -> str:
+    """
+    Veckans rapport, i en enda beräkning för söndagskörningen och /veckorapport.
+
+    slut är rapportens sluttidpunkt i lokal tid, None betyder just nu. Slutar
+    den före veckans sista dag står det överst att veckan är ofullständig, och
+    passen räknas till och med slutets dag. now är klockan för passens
+    FIT-status, som följer verkligheten och inte rapportens slut.
+    """
+    slut = slut or _nu()
+    idag = slut.date()
+    delvis = delvis_vecka(start, end, slut)
+    sista = idag if delvis else end
     iso_year, iso_week, _ = start.isocalendar()
     prev_start, prev_end = start - timedelta(days=7), end - timedelta(days=7)
     base_start = start - timedelta(days=28)
-    idag = date.today()
 
-    nu = totals(conn, start, end)
+    nu = totals(conn, start, sista)
     fg = totals(conn, prev_start, prev_end)
     bas_veckor = veckor_med_data(conn, start)
     visa_4v = bas_veckor >= 4
@@ -499,6 +528,11 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             (base_start.isoformat(), prev_end.isoformat()))}
 
     L = []
+    # Rapporterna klistras in där träningsplanen följs. En halv vecka som ser
+    # ut som en hel läses som att det tränats för lite.
+    if delvis:
+        L.append(f"**{delvis_rad(start, slut)}**")
+        L.append("")
     L.append(f"# Träningsvecka {iso_year}-v{iso_week:02d}")
     L.append(f"{start.isoformat()} till {end.isoformat()}")
     L.append("")
@@ -511,16 +545,12 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             L.append(f"**Obs:** {text}")
             L.append("")
 
-    # Komplett eller pågående vecka
-    if end < idag:
+    if idag >= end:
         L.append("Veckan är komplett.")
-    else:
-        sista = min(end, idag)
-        dagar = [DAGAR[(start + timedelta(days=i)).weekday()]
-                 for i in range((sista - start).days + 1)]
-        L.append(f"**Veckan är pågående.** Rapporten omfattar {', '.join(dagar)} "
-                 f"({start.isoformat()} till {sista.isoformat()}), inte hela veckan.")
-    L.append("")
+        L.append("")
+    elif idag < start:
+        L.append("Veckan har inte börjat.")
+        L.append("")
     L.append("Underlag för uppföljning mot träningsplan. Alla värden är "
              "uppmätta av Apple Watch och oredigerade.")
     L.append("")
@@ -563,6 +593,11 @@ def build_report(conn, start: date, end: date, now=None) -> str:
     L.append("| " + " | ".join(rad) + " |")
     L.append("")
 
+    if delvis:
+        L.append("Jämförelserna ställer delveckan mot hela veckor, och sporter som "
+                 "saknas kan komma senare i veckan.")
+        L.append("")
+
     if not visa_4v:
         L.append(f"Fyraveckorsjämförelsen utelämnad: bara {bas_veckor} av de "
                  f"fyra föregående veckorna har data i databasen.")
@@ -575,15 +610,15 @@ def build_report(conn, start: date, end: date, now=None) -> str:
         L.append("")
 
     # --- pulszoner ---
-    L += zone_section(conn, start, end)
+    L += zone_section(conn, start, sista)
 
     # --- hälsodata ---
-    L += health_section(conn, start, end)
+    L += health_section(conn, start, end, idag)
 
     # --- pass för pass ---
     L.append("## Pass")
     L.append("")
-    for w in workouts(conn, start, end):
+    for w in workouts(conn, start, sista):
         d = datetime.strptime(w["local_date"], "%Y-%m-%d").date()
         L.append(f"### {DAGAR[d.weekday()]} {w['local_date']} - {w['sport_name']}")
         rad = [f"Tid {hms(w['duration_s'])}"]
@@ -856,7 +891,7 @@ def build_report(conn, start: date, end: date, now=None) -> str:
     L.append("|---|---|---|---|---|---|")
     for i in range(11, -1, -1):
         ws, we = start - timedelta(days=7 * i), end - timedelta(days=7 * i)
-        t = totals(conn, ws, we)
+        t = totals(conn, ws, min(we, sista))
         if not t:
             continue
         grupp = {"run": 0, "swim": 0, "bike": 0, "other": 0}
@@ -875,8 +910,16 @@ def build_report(conn, start: date, end: date, now=None) -> str:
 
 # ---------- utskick ----------
 
-def telegram(method, fields, files=None):
-    url = f"https://api.telegram.org/bot{TOKEN}/{method}"
+def rapportfil(start: date, end: date, slut: datetime):
+    """(filnamn, rubrik) för rapporten. En delvecka får egen fil och egen rubrik."""
+    iso_year, iso_week, _ = start.isocalendar()
+    delvis = delvis_vecka(start, end, slut)
+    return (f"vecka-{iso_year}-{iso_week:02d}{'-delvis' if delvis else ''}.md",
+            f"Veckounderlag {iso_year}-v{iso_week:02d}{', delvis' if delvis else ''}")
+
+
+def telegram(method, fields, files=None, token=None):
+    url = f"https://api.telegram.org/bot{token or TOKEN}/{method}"
     boundary = "----traning" + datetime.now().strftime("%H%M%S%f")
     body = b""
     for k, v in fields.items():
@@ -897,25 +940,25 @@ def telegram(method, fields, files=None):
 
 
 def main():
+    slut = _nu()
     anchor = (date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1
-              else date.today() - timedelta(days=1))
+              else slut.date() - timedelta(days=1))
     start, end = week_bounds(anchor)
 
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
-    report = build_report(conn, start, end)
+    report = build_report(conn, start, end, slut=slut)
     conn.close()
 
-    iso_year, iso_week, _ = start.isocalendar()
-    path = OUT_DIR / f"vecka-{iso_year}-{iso_week:02d}.md"
+    filnamn, rubrik = rapportfil(start, end, slut)
+    path = OUT_DIR / filnamn
     path.write_text(report, encoding="utf-8")
     logger.info("Skrev %s (%s tecken)", path, len(report))
 
     if TOKEN and CHAT_ID:
         try:
             telegram("sendDocument",
-                     {"chat_id": CHAT_ID,
-                      "caption": f"Veckounderlag {iso_year}-v{iso_week:02d}"},
+                     {"chat_id": CHAT_ID, "caption": rubrik},
                      {"document": (path.name, report.encode("utf-8"))})
             logger.info("Skickade veckorapport till Telegram")
         except Exception as exc:

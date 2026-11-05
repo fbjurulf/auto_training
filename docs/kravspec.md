@@ -28,7 +28,7 @@ siffra som saknas.
   pass 94 (10-27) gick tyst i åtta dagar.
 - **E-fixturer.** `tests/data/` med FIT-filer, HAE-payloads och
   `facit.json`. `tests/replay.py` spelar upp passen genom de riktiga
-  parsrarna. Sviten har 122 tester, körbara ur en färsk klon med en ny venv
+  parsrarna. Sviten har 140 tester, körbara ur en färsk klon med en ny venv
   ur `requirements.txt`. Koordinaterna är nollade i fixturerna, se
   `tests/data/README.md`.
 - **Schema i repot.** `sql/schema_base.sql` och `sql/seed_reference.sql`
@@ -516,6 +516,25 @@ Nolla `payload` på rader äldre än 90 dagar med status `parsed`, behåll
 hash, storlek och tidsstämpel. VACUUM efteråt, ny backup, och verifiera
 att antalet pass är oförändrat. VACUUM behöver ungefär lika mycket ledigt
 utrymme som databasen är stor.
+
+---
+
+## /veckorapport — byggd 2026-11-05
+
+`/veckorapport` ger innevarande vecka till nu, `/veckorapport 44` vecka 44 i sin
+helhet, som fil precis som söndagsrapporten. Samma beräkning:
+`weekly.build_report` tar sluttidpunkten `slut`, och boten har ingen egen.
+Test: `tests/test_veckorapport.py` jämför kommandots fil för söndag 23:59 med
+vad `weekly.main` skriver söndag 20:00, tecken för tecken.
+
+- **Delvis vecka:** första raden är "Vecka 45, delvis - måndag till torsdag
+  13:55.", och under volymtabellen står att jämförelserna ställer delveckan mot
+  hela veckor.
+- **Söndag räknas som hel vecka.** Söndagsrapporten skrev förut "Veckan är
+  pågående", eftersom den körs på veckans sista dag. Den säger nu "Veckan är
+  komplett". Det är den delen av A7; resten ligger kvar på is.
+- **Läser bara:** skrivskyddad anslutning, ingen rapportfil, inget `notified_at`.
+- Ingen förhandsbekräftelse: längsta veckan tar 0,015 s att räkna på Pi:n.
 
 ---
 

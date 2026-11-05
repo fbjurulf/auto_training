@@ -13,6 +13,8 @@ Allt sker på en rad - inga följdfrågor. Ordningen spelar ingen roll:
     /kommentar 23 Vände vid bron, kortare än planerat
     /rpe 8
     /senaste
+    /veckorapport
+    /veckorapport 44
 
 Körs som systemd-tjänst med long polling. Fail-closed: bara chat-id:t i
 .env släpps in.
@@ -33,6 +35,8 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+import weekly
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -323,7 +327,11 @@ att de inte kommer tillbaka vid nästa import - de räknas då inte i
 rapporter eller statistik.
 
 <b>/angra</b> - ta fram ett dolt pass igen: <code>/angra 23</code>
-<b>/dolda</b> - lista dolda pass"""
+<b>/dolda</b> - lista dolda pass
+
+<b>/veckorapport</b> - veckan hittills, som fil
+<code>/veckorapport 44</code> ger vecka 44 i sin helhet. Rapporten säger överst
+om veckan är ofullständig. Söndagens rapport påverkas inte."""
 
 
 def cmd_logga(conn, arg):
@@ -507,6 +515,46 @@ def cmd_dolda(conn, arg):
     return "\n".join(ut)
 
 
+def rapportvecka(arg, nu):
+    """(måndag, söndag) för /veckorapport, eller en text som säger vad som är fel."""
+    arg = arg.strip()
+    if not arg:
+        return weekly.week_bounds(nu.date())
+    if not re.fullmatch(r"\d{1,2}", arg):
+        return "Skriv ett veckonummer, till exempel <code>/veckorapport 44</code>."
+    vecka = int(arg)
+    ar, denna, _ = nu.date().isocalendar()
+    # En vecka längre fram än denna menar förra året, som i tolka_datum.
+    if vecka > denna:
+        ar -= 1
+    try:
+        return weekly.week_bounds(date.fromisocalendar(ar, vecka, 1))
+    except ValueError:
+        return f"Vecka {vecka} finns inte i {ar}."
+
+
+def cmd_veckorapport(arg):
+    """
+    Samma beräkning som söndagsrapporten, weekly.build_report. Databasen öppnas
+    skrivskyddad och ingen rapportfil skrivs, så söndagens körning blir oförändrad.
+    """
+    nu = weekly._nu()
+    vecka = rapportvecka(arg, nu)
+    if isinstance(vecka, str):
+        return vecka
+    start, end = vecka
+    conn = sqlite3.connect(f"{Path(DB_PATH).resolve().as_uri()}?mode=ro", uri=True, timeout=30)
+    conn.row_factory = sqlite3.Row
+    try:
+        rapport = weekly.build_report(conn, start, end, slut=nu)
+    finally:
+        conn.close()
+    filnamn, rubrik = weekly.rapportfil(start, end, nu)
+    weekly.telegram("sendDocument", {"chat_id": CHAT_ID, "caption": rubrik},
+                    {"document": (filnamn, rapport.encode("utf-8"))}, token=TOKEN)
+    return None
+
+
 KOMMANDON = {
     "logga": cmd_logga, "log": cmd_logga,
     "kommentar": cmd_kommentar, "kommentera": cmd_kommentar, "not": cmd_kommentar,
@@ -561,6 +609,12 @@ def hantera(text):
 
     if namn in ("hjalp", "help", "start", "hjälp"):
         return HJALP
+    if namn in ("veckorapport", "vecka"):
+        try:
+            return cmd_veckorapport(arg)
+        except Exception as exc:
+            logger.exception("Fel i /%s", namn)
+            return f"Kunde inte ta fram veckorapporten: {exc}"
     fn = KOMMANDON.get(namn)
     if fn is None:
         return f"Okänt kommando: /{ord_}\n\n<code>/hjalp</code> visar alla."
@@ -618,7 +672,10 @@ def main():
             if not text:
                 continue
             logger.info("Tog emot: %s", text[:120])
-            skicka(hantera(text))
+            svar_text = hantera(text)
+            # /veckorapport svarar med en fil och har inget att lägga till.
+            if svar_text:
+                skicka(svar_text)
 
 
 if __name__ == "__main__":
