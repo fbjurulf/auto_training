@@ -413,12 +413,31 @@ Lägg en rad under procentsiffran om vad den bygger på: "Räknat på 4:12:00
 löpning och simning. Utanför: 12:04:00 vandring, 0:45:00 styrka."
 
 Testet för v42 testar underlagsraden, inte procentsiffran — den veckan
-ligger all zontid i Z1–Z2, så andelen blir 100 % oavsett.
+ligger all zontid i Z1–Z2, så andelen blir 100 % oavsett. Procenten testas i
+`tests/test_zonandel.py` på en vecka där vandringen gör skillnad.
+
+**Räkna från passen, inte från detaljtabellen (gäller A4, A5 och A7).** Pass
+74 och 76 saknar rad i `workout_swim`, och kontrollen som gick via den
+tabellen validerade bara pass som hade en rad. Testerna ska utgå från
+`v_workout` och vänstersammanfoga, så att ett saknat pass syns som saknat i
+stället för att falla ur urvalet.
+
+**Byggd 2026-11-05.** Migration 0007 lägger till kolumnen; löpning, löpband,
+cykel, spinning och simning räknas. Rapporten skriver "Räknat på 2:18:52
+löpning av veckans 14:28:53. Utanför: 12:10:01 vandring." Övriga sporter står
+kvar i volymtabellen och i zontabellen, märkta _utanför_, och tabellens summarad
+heter _I andelen_ och är samma tal som rubriken. Pass utan zonrader (76 i v41, 94
+i v44) ligger nu i nämnaren och nämns vid namn; de föll förut ur "Underlaget är
+…". En vecka utan zontid i sporterna som räknas får ingen procent i stället för
+0 %. Längdskidor ingår inte (facit listar inte sporten). Rapporten för v45 får en
+rad överst om definitionsbytet.
 
 ## A5. Simningens pulsdata är för gles
 
 Handledspuls i vatten täcker ofta 19–58 % av passet. Är täckningen under
 70 % ingår passet inte i 80/20-andelen. Täckningen visas per pass som nu.
+Ett pass utan zonrader ska synas bland undantagen, inte falla bort — se
+regeln under A4.
 
 ## A6. Längsta sammanhängande simsträcka: två mått — byggd 2026-11-04
 
@@ -443,6 +462,8 @@ intervallpass med kort vila; det är avsett.
   parentes.
 - "Veckan är pågående" visas på söndagskvällar trots att alla sju dagar
   finns. Skilj på _veckan är komplett_ och _hälsodata saknas ännu för …_.
+
+Testerna följer regeln under A4: från `v_workout` med vänstersammanfogning.
 
 ## A7a. Maxpulsregeln måste slå igenom på zontiden
 

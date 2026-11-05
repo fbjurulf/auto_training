@@ -55,6 +55,12 @@ DEFINITIONSBYTEN = [
      "simpass är omräknade. Äldre rapporter visar ett snabbare tempo enligt den "
      "gamla definitionen - till exempel 2:03 per 100 m för 2026-10-21, som nu "
      "är 2:12. Det är en ändrad beräkning, inte en förändring i simningen."),
+    (date(2026, 11, 5),
+     "Andelen lugn träning räknas från och med denna vecka bara på löpning, "
+     "cykling och simning. Vandring, styrka och andra sporter står kvar i "
+     "volymtabellen och zontabellen men ingår inte i procenten. Pass utan "
+     "zondata räknas nu som tid utan puls i stället för att falla bort. Äldre "
+     "rapporter räknade på allt och är inte jämförbara."),
 ]
 
 # Gränser för vad som räknas som avvikande dygn.
@@ -158,8 +164,9 @@ def zones_for(conn, workout_id):
 
 def zone_section(conn, start: date, end: date):
     """
-    Tid i pulszon per vecka, per sport och totalt. Andelen lugn träning
-    står först - det är måttet som gör 80/20 verifierbart.
+    Tid i pulszon per vecka, per sport. Andelen lugn träning står först -
+    det är måttet som gör 80/20 verifierbart. Den räknas bara på sporter med
+    sport.counts_in_intensity_ratio (A4); övriga visas i tabellen utanför.
     """
     rader = conn.execute(
         """SELECT s.code sport_code, s.name_sv sport_name, z.zone,
@@ -169,6 +176,15 @@ def zone_section(conn, start: date, end: date):
            JOIN sport s ON s.id = w.sport_id
            WHERE w.local_date BETWEEN ? AND ? AND w.duplicate_of_id IS NULL AND w.deleted_at IS NULL
            GROUP BY s.code, z.zone""",
+        (start.isoformat(), end.isoformat())).fetchall()
+    # Från passen, inte från zonraderna: ett pass utan zoner ska synas som tid
+    # utan puls, inte falla ur urvalet.
+    passen = conn.execute(
+        """SELECT v.id, v.local_date, v.sport_code, v.sport_name, v.duration_s,
+                  s.counts_in_intensity_ratio ingar,
+                  EXISTS (SELECT 1 FROM workout_zone z WHERE z.workout_id = v.id) har_zoner
+           FROM v_workout v JOIN sport s ON s.id = v.sport_id
+           WHERE v.local_date BETWEEN ? AND ? ORDER BY v.started_at""",
         (start.isoformat(), end.isoformat())).fetchall()
 
     if not rader:
@@ -188,30 +204,53 @@ def zone_section(conn, start: date, end: date):
         per_sport[r["sport_code"]][r["zone"]] += r["sek"]
         namn[r["sport_code"]] = r["sport_name"]
 
+    tid_per_sport = defaultdict(int)
+    for p in passen:
+        tid_per_sport[p["sport_code"], p["sport_name"], p["ingar"]] += p["duration_s"]
+    def tider(ingar):
+        return sorted(((sek, namn_.lower()) for (_, namn_, i), sek in tid_per_sport.items()
+                       if i == ingar), reverse=True)
+
+    i_andelen = {p["sport_code"] for p in passen if p["ingar"]}
     totalt = defaultdict(float)
-    for sport in per_sport.values():
-        for z, s in sport.items():
+    for code in i_andelen & per_sport.keys():
+        for z, s in per_sport[code].items():
             totalt[z] += s
     summa = sum(totalt.values())
     lugnt = sum(totalt[z] for z in LUGNA_ZONER if z in totalt)
-    andel = 100.0 * lugnt / summa if summa else 0
 
     # Zontiden byggs av pulsen sekund för sekund. Tappar klockan kontakten
     # finns inget värde att placera i en zon, och underlaget blir mindre än
     # passets tid. Det ska synas - annars ser andelen säkrare ut än den är.
-    tranad = conn.execute(
-        """SELECT SUM(w.duration_s) sek FROM workout w
-           WHERE w.local_date BETWEEN ? AND ? AND w.duplicate_of_id IS NULL AND w.deleted_at IS NULL
-             AND EXISTS (SELECT 1 FROM workout_zone z WHERE z.workout_id = w.id)""",
-        (start.isoformat(), end.isoformat())).fetchone()["sek"] or 0
+    tranad = sum(sek for sek, _ in tider(1))
 
     L = ["## Tid i pulszon", ""]
-    status = "över" if andel >= ZON_MAL else "under"
-    L.append(f"**{n(andel, 0)} % av träningstiden låg lugnt** "
-             f"({'+'.join(LUGNA_ZONER)}), {status} målet på {ZON_MAL} %.")
+    if summa:
+        andel = 100.0 * lugnt / summa
+        status = "över" if andel >= ZON_MAL else "under"
+        L.append(f"**{n(andel, 0)} % av träningstiden låg lugnt** "
+                 f"({'+'.join(LUGNA_ZONER)}), {status} målet på {ZON_MAL} %.")
+    else:
+        # Ingen siffra hellre än 0 %: veckan har inget att räkna andelen på.
+        L.append("**Ingen andel lugn träning för veckan** - ingen zontid i de "
+                 "sporter som andelen räknas på.")
     L.append("")
 
-    if tranad and summa < tranad * 0.995:
+    # Vad andelen bygger på, så att underlaget inte läses som hela veckan.
+    utanfor = ", ".join(f"{hms(sek)} {namn_}" for sek, namn_ in tider(0))
+    bas = (f"Räknat på {hms(tranad)} " + " och ".join(namn_ for _, namn_ in tider(1))
+           + f" av veckans {hms(sum(tid_per_sport.values()))}."
+           if tranad else "Inget pass i veckan räknas in i andelen.")
+    L.append(bas + (f" Utanför: {utanfor}." if utanfor else ""))
+    L.append("")
+
+    utan_zoner = [p for p in passen if p["ingar"] and not p["har_zoner"]]
+    if utan_zoner:
+        L.append("Utan zondata, räknas som tid utan puls: " + ", ".join(
+            f"{p['local_date']} {p['sport_name']} (pass {p['id']})" for p in utan_zoner) + ".")
+        L.append("")
+
+    if summa and summa < tranad * 0.995:
         tackning = 100.0 * summa / tranad
         L.append(f"Underlaget är {hms(summa)} av {hms(tranad)} träningstid, "
                  f"{n(tackning, 0)} % täckning. Resten saknar pulsvärde: "
@@ -223,15 +262,23 @@ def zone_section(conn, start: date, end: date):
 
     L.append("| Sport | " + " | ".join(zoner) + " | Lugnt |")
     L.append("|---" * (len(zoner) + 2) + "|")
-    for code, sport in sorted(per_sport.items(),
-                              key=lambda kv: -sum(kv[1].values())):
+    i_ordning = sorted(per_sport.items(), key=lambda kv: -sum(kv[1].values()))
+    for code, sport in i_ordning:
+        if code not in i_andelen:
+            continue
         s_summa = sum(sport.values())
         s_lugnt = sum(sport.get(z, 0) for z in LUGNA_ZONER)
         celler = [hms(sport.get(z, 0)) if sport.get(z) else "-" for z in zoner]
         L.append(f"| {namn[code]} | " + " | ".join(celler) +
                  f" | {n(100.0 * s_lugnt / s_summa, 0)} % |")
-    celler = [hms(totalt.get(z, 0)) if totalt.get(z) else "-" for z in zoner]
-    L.append(f"| **Totalt** | " + " | ".join(celler) + f" | **{n(andel, 0)} %** |")
+    if summa:
+        celler = [hms(totalt.get(z, 0)) if totalt.get(z) else "-" for z in zoner]
+        L.append(f"| **I andelen** | " + " | ".join(celler) + f" | **{n(andel, 0)} %** |")
+    for code, sport in i_ordning:
+        if code in i_andelen:
+            continue
+        celler = [hms(sport.get(z, 0)) if sport.get(z) else "-" for z in zoner]
+        L.append(f"| {namn[code]} | " + " | ".join(celler) + " | utanför |")
     L.append("")
 
     L.append("Zongränser: " + ", ".join(

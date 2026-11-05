@@ -204,14 +204,16 @@ class WeekTests(unittest.TestCase):
         f = FACIT["week_42"]
         marks = ",".join("?" * len(f["zone_basis_sports"]))
         params = (f["start"], f["end"], *f["zone_basis_sports"])
+        # Från passen, inte från zonraderna: ett pass utan zoner ska synas som
+        # tid utan puls, inte falla ur urvalet (pass 76 och 94 har inga).
         zone_s = conn.execute(
-            f"""SELECT SUM(z.seconds) FROM workout_zone z JOIN v_workout w ON w.id = z.workout_id
+            f"""SELECT SUM(z.seconds) FROM v_workout w
+                LEFT JOIN workout_zone z ON z.workout_id = w.id
                 WHERE w.local_date BETWEEN ? AND ? AND w.sport_code IN ({marks})""",
             params).fetchone()[0]
         trained_s = conn.execute(
             f"""SELECT SUM(w.duration_s) FROM v_workout w
-                WHERE w.local_date BETWEEN ? AND ? AND w.sport_code IN ({marks})
-                AND EXISTS (SELECT 1 FROM workout_zone z WHERE z.workout_id = w.id)""",
+                WHERE w.local_date BETWEEN ? AND ? AND w.sport_code IN ({marks})""",
             params).fetchone()[0]
 
         lines = "\n".join(weekly.zone_section(conn, date.fromisoformat(f["start"]),
@@ -219,6 +221,20 @@ class WeekTests(unittest.TestCase):
         match = re.search(r"Underlaget är (\S+) av (\S+) träningstid", lines)
         self.assertIsNotNone(match, lines)
         self.assertEqual(match.groups(), (weekly.hms(zone_s), weekly.hms(trained_s)))
+
+    def test_week_42_says_what_the_basis_is_and_keeps_the_hikes(self):
+        # 2:18:52 ska inte kunna läsas som veckans hela träningstid.
+        import weekly
+        f = FACIT["week_42"]
+        start, end = date.fromisoformat(f["start"]), date.fromisoformat(f["end"])
+        sek = {r["sport_code"]: r["s"] for r in conn.execute(
+            """SELECT sport_code, SUM(duration_s) s FROM v_workout
+               WHERE local_date BETWEEN ? AND ? GROUP BY 1""", (f["start"], f["end"]))}
+        rapport = weekly.build_report(conn, start, end)
+        self.assertIn(f"Räknat på {weekly.hms(sek['run'])} löpning av veckans "
+                      f"{weekly.hms(sum(sek.values()))}. "
+                      f"Utanför: {weekly.hms(sek['hike'])} vandring.", rapport)
+        self.assertRegex(rapport, rf"\| Vandring \| 3 \| {weekly.hms(sek['hike'])} \|")
 
 
 if __name__ == "__main__":
