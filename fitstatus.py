@@ -34,6 +34,39 @@ def fit_status(source_code, fit_enriched, started_at, now=None):
     return FORLORAD
 
 
+LANGDER_SAKNAS = ("Längder saknas i källfilen - mått per längd (längsta sträcka, "
+                  "SWOLF, armtag) går inte att räkna.")
+LANGDER_VANTAR = "Längder saknas än så länge - FIT-filen har inte kommit."
+OPPET_VATTEN = ("Öppet vatten - det finns inga längder att mäta, så mått per längd "
+                "finns inte.")
+
+
+def har_langder(conn, workout_id):
+    """True om passet har riktiga längder. HAE ger bara minutdata, så dess
+    längdantal är distans delat med bana - det räknas inte."""
+    return conn.execute(
+        "SELECT 1 FROM workout_segment WHERE workout_id=? AND kind='length' LIMIT 1",
+        (workout_id,)).fetchone() is not None
+
+
+def simmarkering(conn, w, now=None):
+    """
+    Raden både sammanfattningen och rapporten visar för ett simpass utan
+    längder, eller None. w är en rad ur v_workout. Gäller FIT-filer utan
+    längder (pass 76) och HAE-pass lika: måtten ska inte bara saknas tyst.
+    """
+    if not w["sport_code"].startswith("swim"):
+        return None
+    if w["sport_code"] == "swim_open":
+        return OPPET_VATTEN
+    if har_langder(conn, w["id"]):
+        return None
+    status = fit_status(w["source_code"], w["fit_enriched"], w["started_at"], now)
+    if status is None:
+        return None
+    return LANGDER_VANTAR if status == VANTAR else LANGDER_SAKNAS
+
+
 def markering(status, started_at=None):
     """Raden rapporten visar för ett pass utan FIT-data, eller None."""
     if status == VANTAR:

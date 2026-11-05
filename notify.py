@@ -19,6 +19,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import blockdata
+import fitstatus
 import hojd
 import passdata
 
@@ -162,14 +163,17 @@ def fmt_swim(conn, w):
         rader.append(f"Längsta utan stopp: <b>{num(w['longest_continuous_m'])} m</b>"
                      + (f" · med korta stopp: <b>{num(w['longest_with_short_stops_m'])} m</b>"
                         if w["longest_with_short_stops_m"] else ""))
+    # Utan längder är längdantal, armtag och SWOLF bara distans delat med
+    # bana. simmarkering säger redan att de saknas.
+    per_langd = fitstatus.har_langder(conn, w["id"])
     rader += [
-        rad(f"{w['length_count']} längder" if w["length_count"] else None,
+        rad(f"{w['length_count']} längder" if w["length_count"] and per_langd else None,
             f"{num(w['freestyle_share'] * 100, 0)} % frisim"
             if w["freestyle_share"] is not None else None,
             f"{num(w['strokes_per_length_avg'], 1)} armtag/längd"
-            if w["strokes_per_length_avg"] else None),
+            if w["strokes_per_length_avg"] and per_langd else None),
         rad(puls(w),
-            f"SWOLF {num(w['swolf_avg'])}" if w["swolf_avg"] else None,
+            f"SWOLF {num(w['swolf_avg'])}" if w["swolf_avg"] and per_langd else None,
             f"vila {hms(w['rest_s_total'])}" if w["rest_s_total"] else None),
     ]
     arbete = [s for s in segs if (s["distance_m"] or 0) > 0]
@@ -241,6 +245,10 @@ def build_message(conn, workout_id, sport_code):
         row = conn.execute(
             "SELECT * FROM v_workout WHERE id=?", (workout_id,)).fetchone()
         text = fmt_generic(conn, row)
+
+    simmarkering = fitstatus.simmarkering(conn, row)
+    if simmarkering:
+        text += f"\n{simmarkering}"
 
     z = zontext(conn, workout_id, row["duration_s"])
     if z:

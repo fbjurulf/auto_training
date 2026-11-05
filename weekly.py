@@ -563,6 +563,9 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             w["started_at"])
         if markering:
             L.append(markering)
+        simmarkering = fitstatus.simmarkering(conn, w, now)
+        if simmarkering:
+            L.append(simmarkering)
 
         zoner = zones_for(conn, w["id"])
         if zoner:
@@ -697,6 +700,9 @@ def build_report(conn, start: date, end: date, now=None) -> str:
 
         elif det and w["sport_code"].startswith("swim"):
             har_fit = det["active_s"] is not None
+            # Utan längder är längdantal, armtag och SWOLF bara distans delat
+            # med bana. simmarkering säger redan att de saknas.
+            per_langd = fitstatus.har_langder(conn, w["id"])
 
             # Längsta sammanhängande sträcka först - passets viktigaste tal,
             # och det ska inte gå att förväxla med totaldistans. Två mått
@@ -711,7 +717,7 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             extra = []
             if det["pool_length_m"]:
                 extra.append(f"bana {n(det['pool_length_m'], 0)} m")
-            if det["length_count"]:
+            if det["length_count"] and per_langd:
                 extra.append(f"{det['length_count']} längder")
             if det["freestyle_share"] is not None:
                 extra.append(f"{n(det['freestyle_share'] * 100, 0)} % frisim")
@@ -733,9 +739,9 @@ def build_report(conn, start: date, end: date, now=None) -> str:
             if det["pace_s_per_100m"]:
                 nyckeltal.append(f"{mmss(det['pace_s_per_100m'])}/100 m "
                                  f"räknat på simtiden")
-            if det["strokes_per_length_avg"]:
+            if det["strokes_per_length_avg"] and per_langd:
                 nyckeltal.append(f"{n(det['strokes_per_length_avg'])} armtag/längd")
-            if det["swolf_avg"]:
+            if det["swolf_avg"] and per_langd:
                 best = (f", bästa {n(det['swolf_best'], 0)}"
                         if det["swolf_best"] else "")
                 nyckeltal.append(f"SWOLF {n(det['swolf_avg'], 0)} i snitt{best}")

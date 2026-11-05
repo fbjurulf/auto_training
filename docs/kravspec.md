@@ -47,6 +47,12 @@ siffra som saknas.
   krävde också att HAE-pass bara visar det som går att lita på och
   utelämnar härledda värden. Märkningen finns nu, men splittar och simset
   visas fortfarande.
+  **Simpass utan längder** (`fitstatus.simmarkering`, 2026-11-05): samma rad
+  i sammanfattning och rapport, för HAE-pass och för FIT-filer utan längder
+  (pass 76, 10-05: filen har bara record och session). "Längder saknas i
+  källfilen" i stället för att måtten saknas tyst. Längdantal, armtag och
+  SWOLF visas inte för dessa pass — hos HAE är de distans delat med bana.
+  Öppet vatten (pass 74) är ingen varning men säger varför måtten inte finns.
 - **A1.** Blockdetekteringen. Orsaken var inte en paus utan resume, utan
   att `session/stop_all` ignorerades så att sista blocket aldrig stängdes.
   `blockdata.py` delas av weekly och notify. Block utan innehåll slås ihop
@@ -269,6 +275,22 @@ Kända dubbelberäkningar att åtgärda:
    simningen och kan inte bryta en sammanhängande sträcka. I fixturerna
    finns den bara i första setet: 15, 87, 29 och 29 s. Stopp på 10–11,9 s
    räknas som vändning; accepterat, gränsen bor på ett ställe.
+   **Drar regeln bort simning? Mätt 2026-11-05, regeln oförändrad.** 23 pass
+   har före-start-tid, alltid i set 1; 22 går att jämföra (79 har ett set).
+   Set 1 mot övriga set är 16 av 22 snabbare, median −10 s/100 m (p = 0,052),
+   men set 1 är oftast 25–50 m och korta set är snabba i sig (median 25 m
+   2:05, 50 m 2:14, 100 m 2:18). Mot set av samma distans i samma pass: 13 av
+   19, −4,9 s; placebon set 2 mot senare set ger 12 av 19, −3,1 s (inte
+   särskiljbart). Pulsen under före-start-tiden sjunker eller står still i de
+   flesta pass, också de längsta (222 s: 96→85; 233 s: 88→77; 10-21:s 29 s:
+   96→80), och stiger först när längderna börjar. Klart kvar: längd 1 i set 1
+   är 2,1 s kortare och har ett armtag färre än längd 1 i senare set (16 av
+   20, p = 0,012; i set 2 −0,5 s). Fräsch start och 2 s sen detektering går
+   inte att skilja åt; även i det senare fallet är det 2 s per pass, inte det
+   regeln drar av. 10-21:s set 1 (1:44) är snabbast av set 1 på 50 m, men i
+   samma ände finns 1:52, 1:55 och 1:55. Tempotestet ser inte en helt missad
+   längd — då försvinner både tid och meter; pulsen är enda tecknet mot det,
+   och handledspuls i vatten är ett svagt tecken.
    **Definitionsbyte:** rubrikens simtempo blir långsammare i alla simpass
    (10-21: 2:03 → 2:12/100 m). Veckorapporten för v45 får en rad överst om
    det (`weekly.DEFINITIONSBYTEN`).
