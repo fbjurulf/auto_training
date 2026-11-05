@@ -452,6 +452,29 @@ zontid, pulstäckning och varvens maxpuls. Pulstäckningen räknas mot
 passets tid minus de 90 sekunderna. Visa råvärdet i parentes också vid
 zontiden: "Z5 0:00 (0:40 inkl. första 90 s)".
 
+## A9. Rimlighetskontroll vid import — byggd 2026-11-05
+
+Pass 43 (16 h, 800 m) och 79 (63 min, 25 m) kom in utan att något reagerade,
+och 43 bidrog med 9 774 s simtid till varje summa och trend. `rimlighet.py`
+varnar i Telegram och avvisar aldrig: passet ligger i databasen som vanligt.
+
+- Körs sist i `notify`, i varje pipelinekörning även utan nya pass, eftersom
+  FIT-filen ofta kommer efter att HAE-passet aviserats.
+- Migration 0006 lägger till `workout.rimlighet_varnad`, texten som senast
+  varnades. Varnar bara när texten ändras, så en omtolkning av gamla filer inte
+  larmar igen. `rimlighet.py --baslinje` godtar dagens värden och körs en gång
+  efter migrationen.
+- Gränser per sport: längsta tid, tempo över hela passet (vila inräknad), kortast
+  60 s, maxpuls över 220, och banlängd skild från 25, 33,33 och 50 m. Går från
+  `v_workout` med vänstersammanfogning, så pass utan rad i `workout_swim` kontrolleras.
+- Mot produktionen 2026-11-05 faller 43 utanför (tid och tempo), 79 likaså men
+  det är dolt, och 58 (08-12) på banlängden 52 m.
+- **Pass 58 utrett, inte rättat.** 57,7 s och 24,5 armtag per längd, mot 32 s och
+  12 armtag i 25 m-passen, vid samma takt (25 armtag/min). På 25 m vore det 3:51/100 m
+  och 1,0 m/armtag, mot passens 1:58–2:18 och 1,9–2,5 m. Armtagen ger 52 m, tempot
+  45 m. Passet är ingen 25 m-bana, och FIT-filen säger 52 m och utomhus. Exakt
+  längd går inte att avgöra ur datan.
+
 ---
 
 ## F2. Backup

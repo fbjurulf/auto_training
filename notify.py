@@ -22,6 +22,7 @@ import blockdata
 import fitstatus
 import hojd
 import passdata
+import rimlighet
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
@@ -285,10 +286,6 @@ def main():
         """SELECT id, sport_code FROM v_workout
            WHERE notified_at IS NULL ORDER BY started_at""").fetchall()
 
-    if not pending:
-        logger.info("Inget nytt att avisera")
-        return
-
     sent = 0
     for row in pending:
         try:
@@ -301,7 +298,17 @@ def main():
         except Exception as exc:
             logger.error("Kunde inte avisera pass %s: %s", row["id"], exc)
 
-    logger.info("Skickade %s av %s notiser", sent, len(pending))
+    if pending:
+        logger.info("Skickade %s av %s notiser", sent, len(pending))
+    else:
+        logger.info("Inget nytt att avisera")
+
+    # Efter sammanfattningarna, och även utan nya pass: FIT-filen kommer ofta
+    # efter att HAE-passet redan aviserats och kan ändra passets värden.
+    try:
+        rimlighet.kontrollera(conn, send, logger)
+    except Exception as exc:
+        logger.error("Rimlighetskontrollen misslyckades: %s", exc)
     conn.close()
 
 
