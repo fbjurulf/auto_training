@@ -23,6 +23,9 @@ repot någonsin delas måste historiken hanteras först.
   sport och vilket `raw_import.id` det kommer från. Hela payloads
   sparas inte: HAE skickar ett rullande fönster, så en payload på upp
   till 16 MB innehåller mest andra pass.
+  `2026-11-19_pilates_raw809.json.gz` ingår inte i `replay.json`: den
+  används av `tests/test_hae_alias.py` för sporter som bara finns i HAE och
+  hamnar i `workout_other`. Den har ingen rutt, så det fanns inget att nolla.
 - `replay.json`: händelserna i produktionens ordning. För varje pass
   finns den första och den sista HAE-payloaden som innehöll det, och
   FIT-filen vid den tidpunkt då den först sågs. Ordningen avgör vilken

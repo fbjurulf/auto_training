@@ -37,7 +37,7 @@ Skriv aldrig till .env eller traning.db utan att fråga först.
 - Att en fil saknas lokalt betyder att den är produktionsdata, inte att den inte finns.
 - Allt som skriver till traning.db körs under samma lås som pipeline.sh, annars
   kan det krocka med cron-körningen var 15:e minut:
-    flock /tmp/traning.lock <kommando>
+    flock -w 120 /tmp/traning.lock <kommando>
   Det gäller schemaändringar, UPDATE mot raw_import.status, parserkörningar
   och omimport.
 - 90-dagarsrensningen av raw_import får inte köras förrän B0 är besvarad —

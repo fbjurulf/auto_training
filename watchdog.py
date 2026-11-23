@@ -20,11 +20,14 @@ DB_PATH = os.environ.get("TRANING_DB", str(BASE_DIR / "traning.db"))
 LOG_PATH = os.environ.get(
     "TRANING_WATCHDOG_LOG", str(BASE_DIR / "logs" / "watchdog.log")
 )
-# Vilka okända HAE-sporter som redan larmats. En egen fil, som .telegram_offset:
-# vakthunden går utan pipelinens lås och skriver inte till databasen. Väntade den
-# på låset skulle en hängd pipeline tysta också vakthunden.
+# Vilka okända sporter som redan larmats, en fil per källa. Egna filer, som
+# .telegram_offset: vakthunden går utan pipelinens lås och skriver inte till
+# databasen. Väntade den på låset skulle en hängd pipeline tysta också vakthunden.
 OKANDA_PATH = Path(os.environ.get(
     "TRANING_WATCHDOG_OKANDA", str(BASE_DIR / ".hae_okanda_larmade")
+))
+FIT_OKANDA_PATH = Path(os.environ.get(
+    "TRANING_WATCHDOG_FIT_OKANDA", str(BASE_DIR / ".fit_okanda_larmade")
 ))
 TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
@@ -51,29 +54,40 @@ def _utc_datetime(value):
     return parsed.astimezone(timezone.utc)
 
 
-def _larmade():
+def _larmade(path):
     try:
-        return set(OKANDA_PATH.read_text(encoding="utf-8").splitlines())
+        return set(path.read_text(encoding="utf-8").splitlines())
     except OSError:
         return set()
 
 
-def okanda_hae_sporter(conn):
+def _okanda(conn, source_code, path):
     """
-    Sportnamn HAE skickat som saknar alias och inte larmats än. Söker i alla
-    körningar, inte ett tidsfönster: en payload tolkas bara en gång, och ett
-    misslyckat utskick eller en missad körning får inte tappa namnet.
+    Sportnamn källan rapporterat som saknar alias och inte larmats än. Söker i
+    alla körningar, inte ett tidsfönster: en HAE-payload tolkas bara en gång, och
+    ett misslyckat utskick eller en missad körning får inte tappa namnet.
     """
     namn = set()
     for (detalj,) in conn.execute(
             """SELECT DISTINCT ir.skipped_detail FROM import_run ir
                JOIN source s ON s.id = ir.source_id
-               WHERE s.code = 'apple_health_hae' AND ir.skipped_detail <> ''"""):
+               WHERE s.code = ? AND ir.skipped_detail <> ''""", (source_code,)):
         namn.update(n.strip() for n in detalj.split(",") if n.strip())
     alias = {r[0] for r in conn.execute(
         """SELECT a.external_code FROM sport_alias a JOIN source s ON s.id = a.source_id
-           WHERE s.code = 'apple_health_hae'""")}
-    return sorted(namn - alias - _larmade())
+           WHERE s.code = ?""", (source_code,))}
+    return sorted(namn - alias - _larmade(path))
+
+
+def okanda_hae_sporter(conn):
+    return _okanda(conn, "apple_health_hae", OKANDA_PATH)
+
+
+def okanda_fit_sporter(conn):
+    # parse_fit försöker med en fil av okänd sport var 15:e minut, så samma namn
+    # står i varje körning. Larmet går en gång per namn, som för HAE: ett larm
+    # som upprepas varje dag slutar läsas.
+    return _okanda(conn, "healthfit_fit", FIT_OKANDA_PATH)
 
 
 def database_alerts(conn, now):
@@ -94,6 +108,12 @@ def database_alerts(conn, now):
     elif (now.date() - date.fromisoformat(latest_health)).days > HEALTH_DATA_MAX_AGE_DAYS:
         alerts.append(f"Senaste hälsodata är äldre än 2 dygn ({latest_health}).")
 
+    okanda_fit = okanda_fit_sporter(conn)
+    if okanda_fit:
+        alerts.append(
+            "Okända sporter från FIT, filerna importeras inte. Lägg till i "
+            "sport_alias: " + ", ".join(okanda_fit) + ".")
+
     latest_fit_run = conn.execute(
         """SELECT ir.started_at, ir.skipped_count, ir.skipped_detail
            FROM import_run ir
@@ -104,14 +124,6 @@ def database_alerts(conn, now):
     if latest_fit_run:
         skipped_count = latest_fit_run[1]
         skipped_detail = latest_fit_run[2]
-        if skipped_detail:
-            sports = [name.strip() for name in skipped_detail.split(",") if name.strip()]
-            count = len(sports)
-            label = "okänd sport" if count == 1 else "okända sporter"
-            alerts.append(
-                f"FIT-import {latest_fit_run[0]}: {count} {label}: "
-                f"{', '.join(sports)}."
-            )
         if skipped_count and not skipped_detail:
             alerts.append(
                 f"FIT-import {latest_fit_run[0]} hoppade över "
@@ -225,15 +237,16 @@ def send_alert(message):
 
 def run_checks(conn, now=None, run=subprocess.run):
     now = now or datetime.now(timezone.utc)
-    okanda = okanda_hae_sporter(conn)
+    okanda = {OKANDA_PATH: okanda_hae_sporter(conn), FIT_OKANDA_PATH: okanda_fit_sporter(conn)}
     alerts = database_alerts(conn, now) + external_alerts(run)
     if alerts:
         send_alert("Traningsarkiv - vakthund:\n- " + "\n- ".join(alerts))
         logger.error("Vakthundslarm: %s", "; ".join(alerts))
         # Först när utskicket gått: send_alert kastar annars, och då larmar nästa körning.
-        if okanda:
-            OKANDA_PATH.write_text("\n".join(sorted(_larmade() | set(okanda))) + "\n",
-                                   encoding="utf-8")
+        for path, namn in okanda.items():
+            if namn:
+                path.write_text("\n".join(sorted(_larmade(path) | set(namn))) + "\n",
+                                encoding="utf-8")
     else:
         logger.info("Vakthund OK: import, hälsodata, Dropbox och tjänster")
     return alerts

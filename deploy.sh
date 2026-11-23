@@ -29,7 +29,7 @@ if [[ -z "${TELEGRAM_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
   exit 1
 fi
 
-.venv/bin/python -c "import parse_hae, parse_fit, parse_metrics, notify, weekly, telegram_logg, ingest_app, watchdog"
+.venv/bin/python -c "import parse_hae, parse_fit, parse_metrics, notify, weekly, telegram_logg, ingest_app, watchdog, omtolka_hae"
 
 sudo systemctl restart traning-bot
 sudo systemctl restart traning-ingest

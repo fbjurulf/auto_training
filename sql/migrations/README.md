@@ -20,7 +20,7 @@ Köra mot Pi:n (efter deploy, så att filen finns där). Under samma lås som
 pipeline.sh, annars kan den krocka med cron-körningen:
 
     ssh fredrik@100.107.27.54 "cd /home/fredrik/traning && \
-      flock /tmp/traning.lock sqlite3 traning.db < sql/migrations/0001_kort_beskrivning.sql"
+      flock -w 120 /tmp/traning.lock sqlite3 traning.db < sql/migrations/0001_kort_beskrivning.sql"
 
 ## Generera om grundfilerna
 
@@ -44,7 +44,7 @@ går att fråga i en databas byggd av filerna.
   ligger bara kvar som historik — kör dem inte.
 - `fix_dubbletter.sql` är ingen migrering utan en reparation: den tar bort
   HAE-pass som också finns från FIT. Den kan behövas igen (A8 gäller
-  dubbletter). Den raderar rader, så den körs under `flock /tmp/traning.lock`
+  dubbletter). Den raderar rader, så den körs under `flock -w 120 /tmp/traning.lock`
   och bara efter att du frågat.
 
 ## Känt om referensdatan

@@ -15,9 +15,10 @@ class WatchdogTests(unittest.TestCase):
         self.conn = build_db()
         self.now = datetime(2026, 11, 1, 8, tzinfo=timezone.utc)
         self.tmp = tempfile.mkdtemp(prefix="traning-test-")
-        p = patch.object(watchdog, "OKANDA_PATH", Path(self.tmp) / "larmade")
-        p.start()
-        self.addCleanup(p.stop)
+        for namn, fil in (("OKANDA_PATH", "larmade"), ("FIT_OKANDA_PATH", "fit_larmade")):
+            p = patch.object(watchdog, namn, Path(self.tmp) / fil)
+            p.start()
+            self.addCleanup(p.stop)
 
     def tearDown(self):
         self.conn.close()
@@ -54,16 +55,52 @@ class WatchdogTests(unittest.TestCase):
         alerts = watchdog.database_alerts(self.conn, self.now)
         self.assertEqual(len(alerts), 2)
 
-    def test_latest_fit_run_with_skipped_files_alerts(self):
-        _fit_run(self.conn, 1, "2026-11-01T07:00:00Z", 7,
-                 "cross_country_skiing/generic, racket/badminton")
+    def test_unknown_fit_sport_alerts_with_its_name(self):
+        _fit_run(self.conn, 1, "2026-11-01T07:00:00Z", 2,
+                 "fitness_equipment/yoga, water_sports/kayaking")
         alerts = watchdog.database_alerts(self.conn, self.now)
         self.assertEqual(len(alerts), 3)
         self.assertEqual(
             alerts[-1],
-            "FIT-import 2026-11-01T07:00:00Z: 2 okända sporter: "
-            "cross_country_skiing/generic, racket/badminton.",
+            "Okända sporter från FIT, filerna importeras inte. Lägg till i "
+            "sport_alias: fitness_equipment/yoga, water_sports/kayaking.",
         )
+
+    def _kor_fit(self, send=None):
+        with patch.object(watchdog, "send_alert", send or (lambda m: None)):
+            return [a for a in watchdog.run_checks(self.conn, self.now, run=lambda *a, **k: _success())
+                    if "FIT" in a]
+
+    def test_unknown_fit_sport_alerts_once_per_name(self):
+        # Pilates 2026-11-19: parse_fit hoppade över samma fil var 15:e minut och
+        # vakthunden larmade varje morgon. Nu en gång, som för HAE.
+        _fit_run(self.conn, 1, "2026-10-31T18:15:04Z", 1, "fitness_equipment/yoga")
+        self.assertEqual(len(self._kor_fit()), 1)
+        _fit_run(self.conn, 2, "2026-11-01T07:00:00Z", 1, "fitness_equipment/yoga")
+        self.assertEqual(self._kor_fit(), [], "samma fil nästa dag får inte larma igen")
+        _fit_run(self.conn, 3, "2026-11-01T07:15:00Z", 2,
+                 "fitness_equipment/yoga, water_sports/kayaking")
+        nytt = self._kor_fit()
+        self.assertTrue(nytt[0].endswith("sport_alias: water_sports/kayaking."), nytt)
+
+    def test_failed_fit_alert_is_tried_again(self):
+        _fit_run(self.conn, 1, "2026-10-31T18:15:04Z", 1, "fitness_equipment/yoga")
+
+        def trasig(_):
+            raise RuntimeError("Telegram nere")
+        with self.assertRaises(RuntimeError):
+            self._kor_fit(trasig)
+        self.assertEqual(len(self._kor_fit()), 1)
+
+    def test_fit_name_with_alias_does_not_alert(self):
+        _fit_run(self.conn, 1, "2026-11-01T07:00:00Z", 1, "fitness_equipment/pilates")
+        self.assertEqual(self._kor_fit(), [])
+
+    def test_name_alerted_for_hae_still_alerts_from_fit(self):
+        # Filerna är skilda per källa: ett larmat HAE-namn tystar inte FIT.
+        watchdog.OKANDA_PATH.write_text("Yoga\n", encoding="utf-8")
+        _fit_run(self.conn, 1, "2026-10-31T20:00:00Z", 1, "Yoga")
+        self.assertEqual(len(self._kor_fit()), 1)
 
     def _hae_run(self, started_at, detalj):
         self.conn.execute(
@@ -126,12 +163,12 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(len(alert), 1)
         self.assertTrue(alert[0].endswith("sport_alias: Utomhus Cykling, Yoga."), alert[0])
 
-    def test_latest_fit_run_without_skips_does_not_alert_for_older_skips(self):
-        _fit_run(self.conn, 1, "2026-10-31T07:00:00Z", 7,
-                 "cross_country_skiing/generic, racket/badminton")
+    def test_older_fit_skip_still_alerts_if_never_alerted(self):
+        # Ingen tidsgräns, som för HAE: en senare körning utan okända får inte
+        # dölja ett namn som aldrig larmats.
+        _fit_run(self.conn, 1, "2026-10-31T07:00:00Z", 1, "fitness_equipment/yoga")
         _fit_run(self.conn, 2, "2026-11-01T07:00:00Z", 0, "")
-        alerts = watchdog.database_alerts(self.conn, self.now)
-        self.assertEqual(len(alerts), 2)
+        self.assertEqual(len(self._kor_fit()), 1)
 
     def test_non_sport_skipped_files_still_alert(self):
         _fit_run(self.conn, 1, "2026-11-01T07:00:00Z", 2, "")
